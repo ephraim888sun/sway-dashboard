@@ -1,0 +1,232 @@
+{
+  "viewpoint_group_id": "4d627244-5598-4403-8704-979140ae9cac",
+  "exported_at": "2025-11-10T21:05:13Z",
+  "anonymized": true,
+  "excluded_fields": [
+    "voter_verifications.location",
+    "id_verifications.id_verification_information"
+  ],
+  "tables": {
+    "viewpoint_groups": {
+      "file": "viewpoint_groups.json",
+      "primary_key": "id",
+      "foreign_keys": { "current_slug_id": "slugs.id" },
+      "row_count": 5,
+      "description": "The viewpoint group (ideological coalition)"
+    },
+    "slugs": {
+      "file": "slugs.json",
+      "primary_key": "id",
+      "foreign_keys": { "viewpoint_group_id": "viewpoint_groups.id" },
+      "row_count": 5,
+      "description": "URL slugs for the viewpoint group"
+    },
+    "profile_viewpoint_group_rel_types": {
+      "file": "profile_viewpoint_group_rel_types.json",
+      "primary_key": "value",
+      "foreign_keys": {},
+      "row_count": 5,
+      "description": "Enum: administrator, leader, supporter, bookmarker, default"
+    },
+    "profile_viewpoint_group_rels": {
+      "file": "profile_viewpoint_group_rels.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "profile_id": "profiles.id",
+        "viewpoint_group_id": "viewpoint_groups.id",
+        "type": "profile_viewpoint_group_rel_types.value"
+      },
+      "row_count": 765,
+      "description": "Links profiles to viewpoint groups (supporters/leaders)"
+    },
+    "profiles": {
+      "file": "profiles.json",
+      "primary_key": "id",
+      "foreign_keys": { "person_id": "persons.id" },
+      "row_count": 765,
+      "description": "User profiles - ANONYMIZED"
+    },
+    "profile_user_rels": {
+      "file": "profile_user_rels.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "profile_id": "profiles.id",
+        "user_id": "users.id"
+      },
+      "row_count": 714,
+      "description": "Links users to their profiles"
+    },
+    "users": {
+      "file": "users.json",
+      "primary_key": "id",
+      "foreign_keys": {},
+      "row_count": 765,
+      "description": "User accounts - ANONYMIZED"
+    },
+    "persons": {
+      "file": "persons.json",
+      "primary_key": "id",
+      "foreign_keys": { "user_id": "users.id" },
+      "row_count": 2440,
+      "description": "Person entities - supporters ANONYMIZED, candidates NOT anonymized (public records)"
+    },
+    "id_verifications": {
+      "file": "id_verifications.json",
+      "primary_key": "id",
+      "foreign_keys": { "person_id": "persons.id" },
+      "row_count": 81,
+      "description": "ID verification records - ANONYMIZED, encrypted data excluded"
+    },
+    "voter_verifications": {
+      "file": "voter_verifications.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "person_id": "persons.id",
+        "id_verification_id": "id_verifications.id"
+      },
+      "row_count": 602,
+      "description": "Voter verification records - ANONYMIZED, location excluded"
+    },
+    "jurisdictions": {
+      "file": "jurisdictions.json",
+      "primary_key": "id",
+      "foreign_keys": {},
+      "row_count": 3441,
+      "description": "Geographic/political jurisdictions"
+    },
+    "voter_verification_jurisdiction_rels": {
+      "file": "voter_verification_jurisdiction_rels.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "voter_verification_id": "voter_verifications.id",
+        "jurisdiction_id": "jurisdictions.id"
+      },
+      "row_count": 5546,
+      "description": "Links voter verifications to jurisdictions"
+    },
+    "influence_targets": {
+      "file": "influence_targets.json",
+      "primary_key": "id",
+      "foreign_keys": { "jurisdiction_id": "jurisdictions.id" },
+      "row_count": 15694,
+      "description": "What the viewpoint group is targeting (offices/measures)"
+    },
+    "influence_target_viewpoint_group_rels": {
+      "file": "influence_target_viewpoint_group_rels.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "influence_target_id": "influence_targets.id",
+        "viewpoint_group_id": "viewpoint_groups.id"
+      },
+      "row_count": ,
+      "description": "Links influence targets to viewpoint groups with weights"
+    },
+    "elections": {
+      "file": "elections.json",
+      "primary_key": "id",
+      "foreign_keys": {},
+      "row_count": 449,
+      "description": "Elections with poll dates"
+    },
+    "ballot_items": {
+      "file": "ballot_items.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "election_id": "elections.id",
+        "jurisdiction_id": "jurisdictions.id"
+      },
+      "row_count": 15903,
+      "description": "Items appearing on ballots in jurisdictions"
+    },
+    "parties": {
+      "file": "parties.json",
+      "primary_key": "id",
+      "foreign_keys": {},
+      "row_count": 24,
+      "description": "Political parties"
+    },
+    "offices": {
+      "file": "offices.json",
+      "primary_key": "id",
+      "foreign_keys": { "influence_target_id": "influence_targets.id" },
+      "row_count": 15418,
+      "description": "Political offices"
+    },
+    "office_terms": {
+      "file": "office_terms.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "office_id": "offices.id",
+        "holder_id": "persons.id"
+      },
+      "row_count": 15417,
+      "description": "Specific office terms being filled"
+    },
+    "races": {
+      "file": "races.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "ballot_item_id": "ballot_items.id",
+        "office_term_id": "office_terms.id",
+        "party_id": "parties.id"
+      },
+      "row_count": 15417,
+      "description": "Office contests/races"
+    },
+    "candidacies": {
+      "file": "candidacies.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "race_id": "races.id",
+        "candidate_id": "persons.id"
+      },
+      "row_count": 1734,
+      "description": "Candidates in races - NOT ANONYMIZED"
+    },
+    "measures": {
+      "file": "measures.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "influence_target_id": "influence_targets.id",
+        "ballot_item_id": "ballot_items.id"
+      },
+      "row_count": 146,
+      "description": "Ballot measures/propositions"
+    },
+    "ballot_item_options": {
+      "file": "ballot_item_options.json",
+      "primary_key": "id",
+      "foreign_keys": {
+        "ballot_item_id": "ballot_items.id",
+        "candidacy_id": "candidacies.id"
+      },
+      "row_count": 1746,
+      "description": "Choices for ballot items (candidates/yes/no options)"
+    }
+  },
+  "import_order": [
+    "profile_viewpoint_group_rel_types",
+    "parties",
+    "elections",
+    "jurisdictions",
+    "users",
+    "persons",
+    "viewpoint_groups",
+    "slugs",
+    "ballot_items",
+    "profiles",
+    "influence_targets",
+    "id_verifications",
+    "voter_verifications",
+    "offices",
+    "measures",
+    "profile_user_rels",
+    "profile_viewpoint_group_rels",
+    "influence_target_viewpoint_group_rels",
+    "voter_verification_jurisdiction_rels",
+    "office_terms",
+    "races",
+    "candidacies",
+    "ballot_item_options"
+  ]
+}

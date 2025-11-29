@@ -1,0 +1,2 @@
+ [{"value":"default","description":"Default viewpoint group for profile"}, {"value":"administrator","description":"User administrates this viewpoint group"}, {"value":"leader","description":"User leads this viewpoint group"}, {"value":"bookmarker","description":"User has bookmarked this viewpoint group"}, {"value":"supporter","description":"User supports this viewpoint group"}]
+
