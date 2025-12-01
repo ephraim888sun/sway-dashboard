@@ -118,7 +118,7 @@
         "influence_target_id": "influence_targets.id",
         "viewpoint_group_id": "viewpoint_groups.id"
       },
-      "row_count": ,
+      "row_count": 0,
       "description": "Links influence targets to viewpoint groups with weights"
     },
     "elections": {
