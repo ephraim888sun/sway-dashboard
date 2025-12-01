@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupporterGrowthTimeSeries } from "@/lib/queries";
 import type { TimeSeriesData } from "@/types/dashboard";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 3600; // Revalidate every hour
 
 export async function GET(request: Request) {

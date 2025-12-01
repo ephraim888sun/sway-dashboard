@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getJurisdictionsWithInfluence } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 1800; // Revalidate every 30 minutes
 
 export async function GET(request: Request) {

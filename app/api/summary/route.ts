@@ -7,6 +7,7 @@ import {
 } from "@/lib/queries";
 import type { SummaryMetrics } from "@/types/dashboard";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 900; // Revalidate every 15 minutes
 
 export async function GET(request: Request) {

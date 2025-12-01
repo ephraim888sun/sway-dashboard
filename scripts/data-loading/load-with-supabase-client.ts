@@ -37,14 +37,14 @@ interface Schema {
   import_order: string[];
 }
 
-function readJsonFile(filename: string): any[] {
+function readJsonFile(filename: string): unknown[] {
   const filePath = join(DATA_DIR, filename);
   console.log(`Reading ${filename}...`);
   const content = readFileSync(filePath, 'utf-8');
   return JSON.parse(content);
 }
 
-async function insertBatch(tableName: string, rows: any[], batchSize: number = 1000): Promise<void> {
+async function insertBatch(tableName: string, rows: unknown[], batchSize: number = 1000): Promise<void> {
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
     const { error } = await supabase.from(tableName).upsert(batch, { onConflict: 'id' });
@@ -103,9 +103,10 @@ async function main() {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`  ✓ Completed in ${duration}s`);
       
-    } catch (error: any) {
-      console.error(`  ✗ ERROR: ${error.message}`);
-      if (error.message.includes('ENOENT')) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`  ✗ ERROR: ${message}`);
+      if (message.includes('ENOENT')) {
         console.error(`    File not found: ${config.file}`);
       } else {
         // Continue with next table on error

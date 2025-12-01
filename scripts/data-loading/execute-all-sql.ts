@@ -62,11 +62,12 @@ async function main() {
         console.log(`   First batch preview (first 200 chars):`);
         console.log(`   ${batches[0].substring(0, 200)}...`);
       }
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
         console.log(`\n⚠️  ${tableName}: File not found`);
       } else {
-        console.error(`\n❌ ${tableName}: ${error.message}`);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`\n❌ ${tableName}: ${message}`);
       }
     }
   }

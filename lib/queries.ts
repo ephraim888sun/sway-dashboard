@@ -1,5 +1,4 @@
 import { getSupabase } from "./supabase";
-import { getLeaderViewpointGroupNetwork } from "./leader-context";
 import type {
   JurisdictionInfluence,
   TimeSeriesDataPoint,
@@ -514,8 +513,7 @@ export async function getUpcomingElections(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             race.influence_target_id || null,
-            networkIds,
-            viewpointGroupId
+            networkIds
           );
           return {
             ballotItemId: bi.id,
@@ -534,8 +532,7 @@ export async function getUpcomingElections(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             measure.influence_target_id || null,
-            networkIds,
-            viewpointGroupId
+            networkIds
           );
           return {
             ballotItemId: bi.id,
@@ -708,8 +705,7 @@ async function getMeasureDetail(
 async function calculateInfluenceScore(
   supporterCount: number,
   influenceTargetId: string | null,
-  networkIds: string[],
-  viewpointGroupId?: string
+  networkIds: string[]
 ): Promise<number> {
   if (!influenceTargetId) {
     return 0;

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { getSupportersByJurisdiction } from "@/lib/queries";
-import { getLeaderViewpointGroupNetwork } from "@/lib/leader-context";
 import type { ElectionDetail, BallotItem, Candidate } from "@/types/dashboard";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 1800; // Revalidate every 30 minutes
 
 async function getRaceDetail(raceId: string) {
@@ -108,8 +107,7 @@ async function getMeasureDetail(measureId: string) {
 async function calculateInfluenceScore(
   supporterCount: number,
   influenceTargetId: string | null,
-  networkIds: string[],
-  viewpointGroupId?: string
+  networkIds: string[]
 ): Promise<number> {
   if (!influenceTargetId) {
     return 0;
@@ -230,8 +228,7 @@ export async function GET(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             race.influence_target_id || null,
-            networkIds,
-            viewpointGroupId
+            networkIds
           );
           return {
             ballotItemId: bi.id,
@@ -249,8 +246,7 @@ export async function GET(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             measure.influence_target_id || null,
-            networkIds,
-            viewpointGroupId
+            networkIds
           );
           return {
             ballotItemId: bi.id,

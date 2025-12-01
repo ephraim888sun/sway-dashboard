@@ -7,13 +7,8 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const DATA_DIR = join(process.cwd(), "data");
 const SQL_DIR = join(process.cwd(), "scripts", "data-loading");
 const PROJECT_ID = "wfnvjaobqsvxhpuxrysg";
-
-interface Schema {
-  import_order: string[];
-}
 
 // Import order from schema.json
 const importOrder = [
@@ -74,7 +69,6 @@ async function main() {
 
       // Execute each statement
       for (let i = 0; i < statements.length; i++) {
-        const statement = statements[i] + ";";
         console.log(`   Executing statement ${i + 1}/${statements.length}...`);
 
         // Note: This would need to be executed via MCP tool
@@ -83,11 +77,12 @@ async function main() {
       }
 
       console.log(`   ✅ ${tableName} completed`);
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
         console.log(`   ⏭️  Skipping (file not found)`);
       } else {
-        console.error(`   ❌ Error: ${error.message}`);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`   ❌ Error: ${message}`);
       }
     }
   }
