@@ -78,4 +78,3 @@ function ElectionsContent() {
 export default function ElectionsPageClient() {
   return <ElectionsContent />;
 }
-

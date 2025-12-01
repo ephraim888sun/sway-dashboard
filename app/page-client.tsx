@@ -31,13 +31,21 @@ function LoadingSkeleton() {
 
 function DashboardContent() {
   const { selectedGroupId } = useViewpointGroup();
-  
-  const { data: summary, isLoading: summaryLoading } = useSummaryMetrics(selectedGroupId);
-  const { data: timeSeries, isLoading: timeSeriesLoading } = useTimeSeriesData(selectedGroupId);
-  const { data: jurisdictions = [], isLoading: jurisdictionsLoading } = useJurisdictions(selectedGroupId);
-  const { data: elections = [], isLoading: electionsLoading } = useElections(selectedGroupId);
 
-  const loading = summaryLoading || timeSeriesLoading || jurisdictionsLoading || electionsLoading;
+  const { data: summary, isLoading: summaryLoading } =
+    useSummaryMetrics(selectedGroupId);
+  const { data: timeSeries, isLoading: timeSeriesLoading } =
+    useTimeSeriesData(selectedGroupId);
+  const { data: jurisdictions = [], isLoading: jurisdictionsLoading } =
+    useJurisdictions(selectedGroupId);
+  const { data: elections = [], isLoading: electionsLoading } =
+    useElections(selectedGroupId);
+
+  const loading =
+    summaryLoading ||
+    timeSeriesLoading ||
+    jurisdictionsLoading ||
+    electionsLoading;
 
   // Transform jurisdictions for DataTable
   const tableData = jurisdictions.slice(0, 10).map((j, index) => ({
@@ -66,7 +74,26 @@ function DashboardContent() {
         <h2 className="text-2xl font-semibold mb-4">
           Top Jurisdictions by Influence
         </h2>
-        <DataTable data={tableData} />
+        {jurisdictionsLoading ? (
+          <div className="rounded-md border">
+            <div className="p-8">
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="h-12 bg-muted animate-pulse rounded"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : tableData.length > 0 ? (
+          <DataTable data={tableData} />
+        ) : (
+          <div className="rounded-md border p-8 text-center text-muted-foreground">
+            No jurisdictions data available
+          </div>
+        )}
       </div>
     </div>
   );

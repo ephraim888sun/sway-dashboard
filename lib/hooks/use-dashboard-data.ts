@@ -25,7 +25,9 @@ export function useSummaryMetrics(viewpointGroupId?: string) {
 
   return useSWR<SummaryMetrics | null>(key, () => fetcher(url.toString()), {
     revalidateOnFocus: false,
+    revalidateOnMount: true,
     keepPreviousData: true,
+    fallbackData: undefined,
   });
 }
 
@@ -42,7 +44,9 @@ export function useTimeSeriesData(
 
   return useSWR<TimeSeriesData | null>(key, () => fetcher(url.toString()), {
     revalidateOnFocus: false,
+    revalidateOnMount: true,
     keepPreviousData: true,
+    fallbackData: undefined,
   });
 }
 
@@ -63,7 +67,9 @@ export function useJurisdictions(
 
   return useSWR<JurisdictionInfluence[]>(key, () => fetcher(url.toString()), {
     revalidateOnFocus: false,
+    revalidateOnMount: true,
     keepPreviousData: true,
+    fallbackData: undefined,
   });
 }
 
@@ -80,6 +86,8 @@ export function useElections(
 
   return useSWR<ElectionInfluence[]>(key, () => fetcher(url.toString()), {
     revalidateOnFocus: false,
+    revalidateOnMount: true,
     keepPreviousData: true,
+    fallbackData: undefined,
   });
 }
