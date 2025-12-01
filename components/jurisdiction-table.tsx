@@ -205,7 +205,16 @@ export function JurisdictionTable({ data, isLoading }: JurisdictionTableProps) {
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  No jurisdictions found.
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-muted-foreground">
+                      No jurisdictions found
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {data.length === 0
+                        ? "No jurisdiction data available"
+                        : "No jurisdictions match the current filters"}
+                    </p>
+                  </div>
                 </TableCell>
               </TableRow>
             )}

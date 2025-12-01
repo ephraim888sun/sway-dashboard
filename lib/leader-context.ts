@@ -1,29 +1,32 @@
-import { supabase, LEADER_VIEWPOINT_GROUP_ID } from "./supabase";
+import { getSupabase } from "./supabase";
+import { LEADER_VIEWPOINT_GROUP_ID } from "./constants";
 
 // Supabase batch size limit for .in() queries
 const SUPABASE_BATCH_SIZE = 100;
 
 /**
- * Get all viewpoint group IDs in the leader's network
+ * Get all viewpoint group IDs in a viewpoint group's network
  * Includes the primary group and all sub-groups created by supporters who became leaders
  */
-export async function getLeaderViewpointGroupNetwork(): Promise<string[]> {
-  const network = new Set<string>([LEADER_VIEWPOINT_GROUP_ID]);
+export async function getViewpointGroupNetwork(
+  viewpointGroupId: string = LEADER_VIEWPOINT_GROUP_ID
+): Promise<string[]> {
+  const network = new Set<string>([viewpointGroupId]);
 
-  // Find all supporters of the leader's primary group
-  const { data: supporters, error: supportersError } = await supabase
+  // Find all supporters of the primary group
+  const { data: supporters, error: supportersError } = await getSupabase()
     .from("profile_viewpoint_group_rels")
     .select("profile_id")
-    .eq("viewpoint_group_id", LEADER_VIEWPOINT_GROUP_ID)
+    .eq("viewpoint_group_id", viewpointGroupId)
     .eq("type", "supporter");
 
   if (supportersError) {
     console.error("Error fetching supporters:", supportersError);
-    return [LEADER_VIEWPOINT_GROUP_ID];
+    return [viewpointGroupId];
   }
 
   if (!supporters || supporters.length === 0) {
-    return [LEADER_VIEWPOINT_GROUP_ID];
+    return [viewpointGroupId];
   }
 
   const supporterProfileIds = supporters
@@ -32,7 +35,7 @@ export async function getLeaderViewpointGroupNetwork(): Promise<string[]> {
 
   // If no supporter profile IDs, return just the primary group
   if (supporterProfileIds.length === 0) {
-    return [LEADER_VIEWPOINT_GROUP_ID];
+    return [viewpointGroupId];
   }
 
   // Find all viewpoint groups where these supporters are leaders
@@ -41,12 +44,12 @@ export async function getLeaderViewpointGroupNetwork(): Promise<string[]> {
 
   for (let i = 0; i < supporterProfileIds.length; i += SUPABASE_BATCH_SIZE) {
     const batch = supporterProfileIds.slice(i, i + SUPABASE_BATCH_SIZE);
-    const { data: subGroups, error: subGroupsError } = await supabase
+    const { data: subGroups, error: subGroupsError } = await getSupabase()
       .from("profile_viewpoint_group_rels")
       .select("viewpoint_group_id")
       .in("profile_id", batch)
       .eq("type", "leader")
-      .neq("viewpoint_group_id", LEADER_VIEWPOINT_GROUP_ID);
+      .neq("viewpoint_group_id", viewpointGroupId);
 
     if (subGroupsError) {
       console.error("Error fetching sub-groups:", subGroupsError);
@@ -69,13 +72,22 @@ export async function getLeaderViewpointGroupNetwork(): Promise<string[]> {
 }
 
 /**
- * Get the leader's primary viewpoint group details
+ * Get viewpoint group network (backward compatibility)
  */
-export async function getLeaderViewpointGroup() {
-  const { data, error } = await supabase
+export async function getLeaderViewpointGroupNetwork(): Promise<string[]> {
+  return getViewpointGroupNetwork(LEADER_VIEWPOINT_GROUP_ID);
+}
+
+/**
+ * Get a viewpoint group's details
+ */
+export async function getViewpointGroup(
+  viewpointGroupId: string = LEADER_VIEWPOINT_GROUP_ID
+) {
+  const { data, error } = await getSupabase()
     .from("viewpoint_groups")
     .select("*")
-    .eq("id", LEADER_VIEWPOINT_GROUP_ID)
+    .eq("id", viewpointGroupId)
     .single();
 
   if (error) {
@@ -84,4 +96,11 @@ export async function getLeaderViewpointGroup() {
   }
 
   return data;
+}
+
+/**
+ * Get the leader's primary viewpoint group details (backward compatibility)
+ */
+export async function getLeaderViewpointGroup() {
+  return getViewpointGroup(LEADER_VIEWPOINT_GROUP_ID);
 }

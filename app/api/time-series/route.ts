@@ -9,8 +9,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const periodType =
       (searchParams.get("period") as "weekly" | "monthly") || "monthly";
+    const viewpointGroupId = searchParams.get("viewpointGroupId") || undefined;
 
-    const data = await getSupporterGrowthTimeSeries(periodType);
+    const data = await getSupporterGrowthTimeSeries(
+      periodType,
+      viewpointGroupId
+    );
 
     const response: TimeSeriesData = {
       data,

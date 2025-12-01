@@ -8,8 +8,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const sortBy = searchParams.get("sortBy") || "supporterShare";
     const order = searchParams.get("order") || "desc";
+    const viewpointGroupId = searchParams.get("viewpointGroupId") || undefined;
 
-    const jurisdictions = await getJurisdictionsWithInfluence();
+    const jurisdictions = await getJurisdictionsWithInfluence(viewpointGroupId);
 
     // Sort jurisdictions
     jurisdictions.sort((a, b) => {

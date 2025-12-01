@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import { LEADER_VIEWPOINT_GROUP_ID } from "./constants";
 
-// Leader's primary viewpoint group ID
-export const LEADER_VIEWPOINT_GROUP_ID = "4d627244-5598-4403-8704-979140ae9cac";
+// Re-export for backward compatibility
+export { LEADER_VIEWPOINT_GROUP_ID };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -36,5 +37,11 @@ export const createClientClient = () => {
   return createClient(supabaseUrl, supabaseAnonKey);
 };
 
-// Default server client for API routes
-export const supabase = createServerClient();
+// Lazy getter for server client (only created when needed)
+let _supabase: ReturnType<typeof createServerClient> | null = null;
+export const getSupabase = () => {
+  if (!_supabase) {
+    _supabase = createServerClient();
+  }
+  return _supabase;
+};

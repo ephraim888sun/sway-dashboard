@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 import { getLeaderViewpointGroupNetwork } from "./leader-context";
 import type {
   JurisdictionInfluence,
@@ -17,13 +17,14 @@ const SUPABASE_BATCH_SIZE = 100;
  * Get all supporters for the leader's network by jurisdiction
  * Uses separate queries for better performance
  */
-export async function getSupportersByJurisdiction(): Promise<
-  Map<string, { profileIds: Set<string>; createdAts: Date[] }>
-> {
-  const networkIds = await getLeaderViewpointGroupNetwork();
+export async function getSupportersByJurisdiction(
+  viewpointGroupId?: string
+): Promise<Map<string, { profileIds: Set<string>; createdAts: Date[] }>> {
+  const { getViewpointGroupNetwork } = await import("./leader-context");
+  const networkIds = await getViewpointGroupNetwork(viewpointGroupId);
 
   // Get all supporters
-  const { data: supporters, error: supportersError } = await supabase
+  const { data: supporters, error: supportersError } = await getSupabase()
     .from("profile_viewpoint_group_rels")
     .select("profile_id, created_at")
     .in("viewpoint_group_id", networkIds)
@@ -46,7 +47,7 @@ export async function getSupportersByJurisdiction(): Promise<
 
   for (let i = 0; i < profileIds.length; i += SUPABASE_BATCH_SIZE) {
     const batch = profileIds.slice(i, i + SUPABASE_BATCH_SIZE);
-    const { data: profiles, error: profilesError } = await supabase
+    const { data: profiles, error: profilesError } = await getSupabase()
       .from("profiles")
       .select("id, person_id")
       .in("id", batch);
@@ -75,7 +76,7 @@ export async function getSupportersByJurisdiction(): Promise<
 
   for (let i = 0; i < personIds.length; i += SUPABASE_BATCH_SIZE) {
     const batch = personIds.slice(i, i + SUPABASE_BATCH_SIZE);
-    const { data: voterVerifications, error: vvError } = await supabase
+    const { data: voterVerifications, error: vvError } = await getSupabase()
       .from("voter_verifications")
       .select("id, person_id")
       .in("person_id", batch);
@@ -107,7 +108,7 @@ export async function getSupportersByJurisdiction(): Promise<
 
   for (let i = 0; i < vvIds.length; i += SUPABASE_BATCH_SIZE) {
     const batch = vvIds.slice(i, i + SUPABASE_BATCH_SIZE);
-    const { data: jurisdictionRels, error: jrError } = await supabase
+    const { data: jurisdictionRels, error: jrError } = await getSupabase()
       .from("voter_verification_jurisdiction_rels")
       .select("voter_verification_id, jurisdiction_id")
       .in("voter_verification_id", batch);
@@ -179,11 +180,13 @@ export async function getSupportersByJurisdiction(): Promise<
  * Get supporter growth time series data
  */
 export async function getSupporterGrowthTimeSeries(
-  periodType: "weekly" | "monthly" = "monthly"
+  periodType: "weekly" | "monthly" = "monthly",
+  viewpointGroupId?: string
 ): Promise<TimeSeriesDataPoint[]> {
-  const networkIds = await getLeaderViewpointGroupNetwork();
+  const { getViewpointGroupNetwork } = await import("./leader-context");
+  const networkIds = await getViewpointGroupNetwork(viewpointGroupId);
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("profile_viewpoint_group_rels")
     .select("created_at")
     .in("viewpoint_group_id", networkIds)
@@ -245,12 +248,15 @@ export async function getSupporterGrowthTimeSeries(
 /**
  * Get active supporter count (last 30 days)
  */
-export async function getActiveSupporterCount(): Promise<number> {
-  const networkIds = await getLeaderViewpointGroupNetwork();
+export async function getActiveSupporterCount(
+  viewpointGroupId?: string
+): Promise<number> {
+  const { getViewpointGroupNetwork } = await import("./leader-context");
+  const networkIds = await getViewpointGroupNetwork(viewpointGroupId);
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const { count, error } = await supabase
+  const { count, error } = await getSupabase()
     .from("profile_viewpoint_group_rels")
     .select("*", { count: "exact", head: true })
     .in("viewpoint_group_id", networkIds)
@@ -268,10 +274,13 @@ export async function getActiveSupporterCount(): Promise<number> {
 /**
  * Get total supporter count
  */
-export async function getTotalSupporterCount(): Promise<number> {
-  const networkIds = await getLeaderViewpointGroupNetwork();
+export async function getTotalSupporterCount(
+  viewpointGroupId?: string
+): Promise<number> {
+  const { getViewpointGroupNetwork } = await import("./leader-context");
+  const networkIds = await getViewpointGroupNetwork(viewpointGroupId);
 
-  const { count, error } = await supabase
+  const { count, error } = await getSupabase()
     .from("profile_viewpoint_group_rels")
     .select("*", { count: "exact", head: true })
     .in("viewpoint_group_id", networkIds)
@@ -288,73 +297,111 @@ export async function getTotalSupporterCount(): Promise<number> {
 /**
  * Get jurisdictions with influence data
  */
-export async function getJurisdictionsWithInfluence(): Promise<
-  JurisdictionInfluence[]
-> {
-  const supportersByJurisdiction = await getSupportersByJurisdiction();
+export async function getJurisdictionsWithInfluence(
+  viewpointGroupId?: string
+): Promise<JurisdictionInfluence[]> {
+  try {
+    const supportersByJurisdiction = await getSupportersByJurisdiction(
+      viewpointGroupId
+    );
 
-  // Get all jurisdiction IDs
-  const jurisdictionIds = Array.from(supportersByJurisdiction.keys());
+    // Get all jurisdiction IDs
+    const jurisdictionIds = Array.from(supportersByJurisdiction.keys());
 
-  if (jurisdictionIds.length === 0) {
-    return [];
+    if (jurisdictionIds.length === 0) {
+      console.log(
+        "No jurisdiction IDs found - no supporters mapped to jurisdictions"
+      );
+      return [];
+    }
+
+    // Get jurisdiction details (batch if needed)
+    const allJurisdictions: {
+      id: string;
+      name: string | null;
+      level: string | null;
+    }[] = [];
+
+    for (let i = 0; i < jurisdictionIds.length; i += SUPABASE_BATCH_SIZE) {
+      const batch = jurisdictionIds.slice(i, i + SUPABASE_BATCH_SIZE);
+      const { data: jurisdictions, error: jurisdictionsError } =
+        await getSupabase()
+          .from("jurisdictions")
+          .select("id, name, level")
+          .in("id", batch);
+
+      if (jurisdictionsError) {
+        console.error(
+          `Error fetching jurisdictions batch ${i / SUPABASE_BATCH_SIZE + 1}:`,
+          jurisdictionsError
+        );
+        continue; // Continue with other batches
+      }
+
+      if (jurisdictions) {
+        allJurisdictions.push(...jurisdictions);
+      }
+    }
+
+    if (allJurisdictions.length === 0) {
+      console.log("No jurisdiction details found for jurisdiction IDs");
+      return [];
+    }
+
+    // Calculate 30 days ago for growth calculation
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const results: JurisdictionInfluence[] = allJurisdictions.map(
+      (jurisdiction) => {
+        const supporters = supportersByJurisdiction.get(jurisdiction.id);
+        const supporterCount = supporters?.profileIds.size || 0;
+        const createdAts = supporters?.createdAts || [];
+
+        // Calculate 30-day growth
+        const recentSupporters = createdAts.filter(
+          (date) => date >= thirtyDaysAgo
+        ).length;
+        const previousCount = supporterCount - recentSupporters;
+        const growth30d =
+          previousCount > 0
+            ? (recentSupporters / previousCount) * 100
+            : recentSupporters > 0
+            ? 100
+            : 0;
+
+        // Calculate active supporters (last 30 days)
+        const activeSupporterCount = recentSupporters;
+        const activeRate =
+          supporterCount > 0
+            ? (activeSupporterCount / supporterCount) * 100
+            : 0;
+
+        // Estimate turnout (placeholder - would need actual data)
+        const estimatedTurnout = estimateTurnout(jurisdiction.level);
+
+        return {
+          jurisdictionId: jurisdiction.id,
+          name: jurisdiction.name || "Unknown",
+          level: jurisdiction.level,
+          supporterCount,
+          estimatedTurnout,
+          supporterShare:
+            estimatedTurnout > 0
+              ? (supporterCount / estimatedTurnout) * 100
+              : null,
+          activeSupporterCount,
+          activeRate,
+          growth30d,
+        };
+      }
+    );
+
+    return results;
+  } catch (error) {
+    console.error("Error in getJurisdictionsWithInfluence:", error);
+    throw error; // Re-throw to allow caller to handle
   }
-
-  // Get jurisdiction details
-  const { data: jurisdictions, error: jurisdictionsError } = await supabase
-    .from("jurisdictions")
-    .select("id, name, level")
-    .in("id", jurisdictionIds);
-
-  if (jurisdictionsError || !jurisdictions) {
-    console.error("Error fetching jurisdictions:", jurisdictionsError);
-    return [];
-  }
-
-  // Calculate 30 days ago for growth calculation
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  const results: JurisdictionInfluence[] = jurisdictions.map((jurisdiction) => {
-    const supporters = supportersByJurisdiction.get(jurisdiction.id);
-    const supporterCount = supporters?.profileIds.size || 0;
-    const createdAts = supporters?.createdAts || [];
-
-    // Calculate 30-day growth
-    const recentSupporters = createdAts.filter(
-      (date) => date >= thirtyDaysAgo
-    ).length;
-    const previousCount = supporterCount - recentSupporters;
-    const growth30d =
-      previousCount > 0
-        ? (recentSupporters / previousCount) * 100
-        : recentSupporters > 0
-        ? 100
-        : 0;
-
-    // Calculate active supporters (last 30 days)
-    const activeSupporterCount = recentSupporters;
-    const activeRate =
-      supporterCount > 0 ? (activeSupporterCount / supporterCount) * 100 : 0;
-
-    // Estimate turnout (placeholder - would need actual data)
-    const estimatedTurnout = estimateTurnout(jurisdiction.level);
-
-    return {
-      jurisdictionId: jurisdiction.id,
-      name: jurisdiction.name || "Unknown",
-      level: jurisdiction.level,
-      supporterCount,
-      estimatedTurnout,
-      supporterShare:
-        estimatedTurnout > 0 ? (supporterCount / estimatedTurnout) * 100 : null,
-      activeSupporterCount,
-      activeRate,
-      growth30d,
-    };
-  });
-
-  return results;
 }
 
 /**
@@ -382,13 +429,14 @@ function estimateTurnout(level: string | null): number {
  * Get upcoming elections with supporter counts
  */
 export async function getUpcomingElections(
-  daysAhead: number = 90
+  daysAhead: number = 90,
+  viewpointGroupId?: string
 ): Promise<ElectionInfluence[]> {
   const today = new Date();
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + daysAhead);
 
-  const { data: elections, error: electionsError } = await supabase
+  const { data: elections, error: electionsError } = await getSupabase()
     .from("elections")
     .select("*")
     .gte("poll_date", today.toISOString().split("T")[0])
@@ -404,14 +452,17 @@ export async function getUpcomingElections(
     return [];
   }
 
-  const networkIds = await getLeaderViewpointGroupNetwork();
-  const supportersByJurisdiction = await getSupportersByJurisdiction();
+  const { getViewpointGroupNetwork } = await import("./leader-context");
+  const networkIds = await getViewpointGroupNetwork(viewpointGroupId);
+  const supportersByJurisdiction = await getSupportersByJurisdiction(
+    viewpointGroupId
+  );
 
   const electionInfluences: ElectionInfluence[] = [];
 
   for (const election of elections) {
     // Get all ballot items for this election
-    const { data: ballotItems, error: ballotError } = await supabase
+    const { data: ballotItems, error: ballotError } = await getSupabase()
       .from("ballot_items")
       .select("*, jurisdictions!inner(*)")
       .eq("election_id", election.id);
@@ -445,13 +496,13 @@ export async function getUpcomingElections(
           supportersByJurisdiction.get(jurisdictionId)?.profileIds.size || 0;
 
         // Check if it's a race or measure
-        const { data: races } = await supabase
+        const { data: races } = await getSupabase()
           .from("races")
           .select("*")
           .eq("ballot_item_id", bi.id)
           .limit(1);
 
-        const { data: measures } = await supabase
+        const { data: measures } = await getSupabase()
           .from("measures")
           .select("*")
           .eq("ballot_item_id", bi.id)
@@ -463,7 +514,8 @@ export async function getUpcomingElections(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             race.influence_target_id || null,
-            networkIds
+            networkIds,
+            viewpointGroupId
           );
           return {
             ballotItemId: bi.id,
@@ -482,7 +534,8 @@ export async function getUpcomingElections(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             measure.influence_target_id || null,
-            networkIds
+            networkIds,
+            viewpointGroupId
           );
           return {
             ballotItemId: bi.id,
@@ -541,7 +594,7 @@ export async function getUpcomingElections(
  * Get detailed race information with candidates
  */
 async function getRaceDetail(raceId: string): Promise<RaceDetail | null> {
-  const { data: race, error: raceError } = await supabase
+  const { data: race, error: raceError } = await getSupabase()
     .from("races")
     .select("*")
     .eq("id", raceId)
@@ -560,7 +613,7 @@ async function getRaceDetail(raceId: string): Promise<RaceDetail | null> {
   let office: { name?: string; level?: string; district?: string } | null =
     null;
   if (race.office_term_id) {
-    const { data: ot } = await supabase
+    const { data: ot } = await getSupabase()
       .from("office_terms")
       .select("*, offices(*)")
       .eq("id", race.office_term_id)
@@ -575,7 +628,7 @@ async function getRaceDetail(raceId: string): Promise<RaceDetail | null> {
   }
 
   // Get candidacies with candidates
-  const { data: candidacies } = await supabase
+  const { data: candidacies } = await getSupabase()
     .from("candidacies")
     .select("*, persons(*), parties(*)")
     .eq("race_id", raceId);
@@ -599,7 +652,7 @@ async function getRaceDetail(raceId: string): Promise<RaceDetail | null> {
   // Get party info
   let party = null;
   if (race.party_id) {
-    const { data: p } = await supabase
+    const { data: p } = await getSupabase()
       .from("parties")
       .select("*")
       .eq("id", race.party_id)
@@ -627,7 +680,7 @@ async function getRaceDetail(raceId: string): Promise<RaceDetail | null> {
 async function getMeasureDetail(
   measureId: string
 ): Promise<MeasureDetail | null> {
-  const { data: measure, error: measureError } = await supabase
+  const { data: measure, error: measureError } = await getSupabase()
     .from("measures")
     .select("*")
     .eq("id", measureId)
@@ -655,14 +708,15 @@ async function getMeasureDetail(
 async function calculateInfluenceScore(
   supporterCount: number,
   influenceTargetId: string | null,
-  networkIds: string[]
+  networkIds: string[],
+  viewpointGroupId?: string
 ): Promise<number> {
   if (!influenceTargetId) {
     return 0;
   }
 
   // Check alignment with viewpoint groups
-  const { data: alignments, error } = await supabase
+  const { data: alignments, error } = await getSupabase()
     .from("influence_target_viewpoint_group_rels")
     .select("weight")
     .eq("influence_target_id", influenceTargetId)

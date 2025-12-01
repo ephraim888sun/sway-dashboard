@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
 import { IconChartBar, IconDashboard, IconUsers } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,7 +13,11 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarGroup,
+  SidebarGroupContent,
 } from "@/components/ui/sidebar";
+import { ViewpointGroupSelectorWrapper } from "./viewpoint-group-selector-wrapper";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const navItems = [
   {
@@ -49,6 +54,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <Suspense
+              fallback={
+                <div className="space-y-2 px-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              }
+            >
+              <ViewpointGroupSelectorWrapper />
+            </Suspense>
+          </SidebarGroupContent>
+        </SidebarGroup>
         <SidebarMenu>
           {navItems.map((item) => {
             const Icon = item.icon;

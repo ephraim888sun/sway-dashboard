@@ -7,8 +7,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const daysAhead = parseInt(searchParams.get("daysAhead") || "90", 10);
+    const viewpointGroupId = searchParams.get("viewpointGroupId") || undefined;
 
-    const elections = await getUpcomingElections(daysAhead);
+    const elections = await getUpcomingElections(daysAhead, viewpointGroupId);
 
     return NextResponse.json(elections);
   } catch (error) {

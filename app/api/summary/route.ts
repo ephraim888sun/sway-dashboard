@@ -9,8 +9,11 @@ import type { SummaryMetrics } from "@/types/dashboard";
 
 export const revalidate = 900; // Revalidate every 15 minutes
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const viewpointGroupId = searchParams.get("viewpointGroupId") || undefined;
+
     // Get all metrics in parallel
     const [
       totalSupporters,
@@ -18,10 +21,10 @@ export async function GET() {
       jurisdictions,
       upcomingElections,
     ] = await Promise.all([
-      getTotalSupporterCount(),
-      getActiveSupporterCount(),
-      getJurisdictionsWithInfluence(),
-      getUpcomingElections(90),
+      getTotalSupporterCount(viewpointGroupId),
+      getActiveSupporterCount(viewpointGroupId),
+      getJurisdictionsWithInfluence(viewpointGroupId),
+      getUpcomingElections(90, viewpointGroupId),
     ]);
 
     // Calculate active rate

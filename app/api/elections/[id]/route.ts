@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { getSupportersByJurisdiction } from "@/lib/queries";
 import { getLeaderViewpointGroupNetwork } from "@/lib/leader-context";
 import type { ElectionDetail, BallotItem, Candidate } from "@/types/dashboard";
@@ -7,7 +7,7 @@ import type { ElectionDetail, BallotItem, Candidate } from "@/types/dashboard";
 export const revalidate = 1800; // Revalidate every 30 minutes
 
 async function getRaceDetail(raceId: string) {
-  const { data: race, error: raceError } = await supabase
+  const { data: race, error: raceError } = await getSupabase()
     .from("races")
     .select("*")
     .eq("id", raceId)
@@ -24,7 +24,7 @@ async function getRaceDetail(raceId: string) {
   let office: { name?: string; level?: string; district?: string } | null =
     null;
   if (race.office_term_id) {
-    const { data: ot } = await supabase
+    const { data: ot } = await getSupabase()
       .from("office_terms")
       .select("*, offices(*)")
       .eq("id", race.office_term_id)
@@ -38,7 +38,7 @@ async function getRaceDetail(raceId: string) {
       } | null) || null;
   }
 
-  const { data: candidacies } = await supabase
+  const { data: candidacies } = await getSupabase()
     .from("candidacies")
     .select("*, persons(*), parties(*)")
     .eq("race_id", raceId);
@@ -61,7 +61,7 @@ async function getRaceDetail(raceId: string) {
 
   let party = null;
   if (race.party_id) {
-    const { data: p } = await supabase
+    const { data: p } = await getSupabase()
       .from("parties")
       .select("*")
       .eq("id", race.party_id)
@@ -84,7 +84,7 @@ async function getRaceDetail(raceId: string) {
 }
 
 async function getMeasureDetail(measureId: string) {
-  const { data: measure, error: measureError } = await supabase
+  const { data: measure, error: measureError } = await getSupabase()
     .from("measures")
     .select("*")
     .eq("id", measureId)
@@ -108,13 +108,14 @@ async function getMeasureDetail(measureId: string) {
 async function calculateInfluenceScore(
   supporterCount: number,
   influenceTargetId: string | null,
-  networkIds: string[]
+  networkIds: string[],
+  viewpointGroupId?: string
 ): Promise<number> {
   if (!influenceTargetId) {
     return 0;
   }
 
-  const { data: alignments } = await supabase
+  const { data: alignments } = await getSupabase()
     .from("influence_target_viewpoint_group_rels")
     .select("weight")
     .eq("influence_target_id", influenceTargetId)
@@ -143,9 +144,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const viewpointGroupId = searchParams.get("viewpointGroupId") || undefined;
 
     // Get election details
-    const { data: election, error: electionError } = await supabase
+    const { data: election, error: electionError } = await getSupabase()
       .from("elections")
       .select("*")
       .eq("id", id)
@@ -159,7 +162,7 @@ export async function GET(
     }
 
     // Get all ballot items for this election
-    const { data: ballotItems, error: ballotError } = await supabase
+    const { data: ballotItems, error: ballotError } = await getSupabase()
       .from("ballot_items")
       .select("*, jurisdictions!inner(*)")
       .eq("election_id", election.id);
@@ -171,8 +174,12 @@ export async function GET(
       );
     }
 
-    const networkIds = await getLeaderViewpointGroupNetwork();
-    const supportersByJurisdiction = await getSupportersByJurisdiction();
+    const { getViewpointGroupNetwork } = await import("@/lib/leader-context");
+    const { getSupportersByJurisdiction } = await import("@/lib/queries");
+    const networkIds = await getViewpointGroupNetwork(viewpointGroupId);
+    const supportersByJurisdiction = await getSupportersByJurisdiction(
+      viewpointGroupId
+    );
 
     // Calculate supporters in scope
     const jurisdictionIds = new Set<string>();
@@ -205,13 +212,13 @@ export async function GET(
         const supporterCount =
           supportersByJurisdiction.get(jurisdictionId)?.profileIds.size || 0;
 
-        const { data: races } = await supabase
+        const { data: races } = await getSupabase()
           .from("races")
           .select("*")
           .eq("ballot_item_id", bi.id)
           .limit(1);
 
-        const { data: measures } = await supabase
+        const { data: measures } = await getSupabase()
           .from("measures")
           .select("*")
           .eq("ballot_item_id", bi.id)
@@ -223,7 +230,8 @@ export async function GET(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             race.influence_target_id || null,
-            networkIds
+            networkIds,
+            viewpointGroupId
           );
           return {
             ballotItemId: bi.id,
@@ -241,7 +249,8 @@ export async function GET(
           const influenceScore = await calculateInfluenceScore(
             supporterCount,
             measure.influence_target_id || null,
-            networkIds
+            networkIds,
+            viewpointGroupId
           );
           return {
             ballotItemId: bi.id,
