@@ -1,7 +1,6 @@
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
-const PROJECT_ID = "wfnvjaobqsvxhpuxrysg";
 const DATA_DIR = join(process.cwd(), "data");
 
 interface TableConfig {
@@ -17,7 +16,7 @@ interface Schema {
 }
 
 // Read and parse JSON file
-function readJsonFile(filename: string): any[] {
+function readJsonFile(filename: string): unknown[] {
   const filePath = join(DATA_DIR, filename);
   console.log(`Reading ${filename}...`);
   const content = readFileSync(filePath, "utf-8");
@@ -25,7 +24,7 @@ function readJsonFile(filename: string): any[] {
 }
 
 // Convert value to SQL literal
-function sqlValue(value: any): string {
+function sqlValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "NULL";
   }
@@ -47,18 +46,23 @@ function sqlValue(value: any): string {
 // Generate INSERT statement for a batch of rows
 function generateInsert(
   tableName: string,
-  rows: any[],
+  rows: unknown[],
   batchSize: number = 100
 ): string[] {
   if (rows.length === 0) return [];
 
   const inserts: string[] = [];
-  const columns = Object.keys(rows[0]);
+  const firstRow = rows[0];
+  if (!firstRow || typeof firstRow !== "object") return [];
+  const columns = Object.keys(firstRow);
 
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
     const values = batch
-      .map((row) => `(${columns.map((col) => sqlValue(row[col])).join(", ")})`)
+      .map((row) => {
+        if (!row || typeof row !== "object") return "()";
+        return `(${columns.map((col) => sqlValue((row as Record<string, unknown>)[col])).join(", ")})`;
+      })
       .join(",\n    ");
 
     const insert = `INSERT INTO ${tableName} (${columns.join(
@@ -111,7 +115,7 @@ async function main() {
     .map(({ table, sql }) => `-- Table: ${table}\n${sql.join("\n\n")}\n`)
     .join("\n\n");
 
-  require("fs").writeFileSync(outputPath, sqlContent);
+  writeFileSync(outputPath, sqlContent);
   console.log(`\nSQL statements written to ${outputPath}`);
   console.log("\nNext steps:");
   console.log("1. Review the generated SQL file");

@@ -1,0 +1,81 @@
+"use client";
+
+import * as React from "react";
+import { ElectionCard } from "@/components/election-card";
+import { useViewpointGroup } from "@/lib/viewpoint-group-context";
+import { useElections } from "@/lib/hooks/use-dashboard-data";
+
+function LoadingSkeleton() {
+  return (
+    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 px-4 lg:px-6">
+      <div className="h-8 bg-muted animate-pulse rounded w-64" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="h-48 bg-muted animate-pulse rounded-lg" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ElectionsContent() {
+  const { selectedGroupId } = useViewpointGroup();
+  const { data: elections = [], isLoading } = useElections(selectedGroupId);
+
+  const highLeverageElections = React.useMemo(
+    () =>
+      elections.filter(
+        (e) => e.supporterShareInScope !== null && e.supporterShareInScope >= 5
+      ),
+    [elections]
+  );
+
+  if (isLoading) {
+    return <LoadingSkeleton />;
+  }
+
+  return (
+    <div className="flex flex-col gap-6 py-4 md:py-6 px-4 lg:px-6">
+      <div>
+        <h1 className="text-3xl font-bold">Upcoming Elections</h1>
+        <p className="text-muted-foreground mt-2">
+          Elections in the next 90 days where your supporters can make an impact
+        </p>
+      </div>
+
+      {highLeverageElections.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">
+            High Leverage Opportunities
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Elections where you have ≥5% of expected turnout
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {highLeverageElections.map((election) => (
+              <ElectionCard key={election.electionId} election={election} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h2 className="text-xl font-semibold mb-4">All Upcoming Elections</h2>
+        {elections.length === 0 ? (
+          <p className="text-muted-foreground">No upcoming elections found.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {elections.map((election) => (
+              <ElectionCard key={election.electionId} election={election} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function ElectionsPageClient() {
+  return <ElectionsContent />;
+}
+

@@ -51,7 +51,9 @@ async function main() {
   console.log("\n🔍 Generating validation queries...");
 
   // Create a SQL query that checks all foreign keys at once
-  const validationSQL = `
+  // Note: This SQL is generated but not used directly - kept for reference
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _validationSQL = `
 -- Check which foreign keys exist
 WITH required_office_terms AS (
   SELECT unnest(ARRAY[${officeTermIds.map((id) => `'${id}'`).join(", ")}]) AS id

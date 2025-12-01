@@ -29,15 +29,13 @@ async function getExistingIds(
   projectId: string,
   tableName: string
 ): Promise<Set<string>> {
-  const query = `SELECT id FROM ${tableName}`;
-
   // Note: This would use mcp_Supabase_execute_sql in actual implementation
   // For now, we'll return an empty set and handle it in the script
   console.log(`   Checking existing IDs in ${tableName}...`);
 
   // In a real implementation, this would be:
   // const result = await mcp_Supabase_execute_sql({ project_id: projectId, query });
-  // return new Set(result.rows.map((row: any) => row.id));
+  // return new Set(result.rows.map((row: { id: string }) => row.id));
 
   return new Set();
 }
@@ -121,7 +119,8 @@ ON CONFLICT (id) DO NOTHING;`;
     "data-loading",
     "insert-races-fixed.sql"
   );
-  require("fs").writeFileSync(outputPath, insertSql);
+  const { writeFileSync } = await import("fs");
+  writeFileSync(outputPath, insertSql);
   console.log(`\n💾 Saved to: ${outputPath}`);
 
   console.log("\n✨ Done! Execute the SQL file via Supabase MCP.");

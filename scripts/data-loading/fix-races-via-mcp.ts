@@ -34,12 +34,11 @@ async function getExistingIds(
   projectId: string,
   tableName: string
 ): Promise<Set<string>> {
-  const query = `SELECT id FROM ${tableName}`;
   console.log(`   Querying ${tableName}...`);
   
   // In actual implementation, this would use:
   // const result = await mcp_Supabase_execute_sql({ project_id: projectId, query });
-  // return new Set(result.rows.map((row: any) => row.id));
+  // return new Set(result.rows.map((row: { id: string }) => row.id));
   
   // For now, return empty set - will be populated by actual MCP call
   return new Set();

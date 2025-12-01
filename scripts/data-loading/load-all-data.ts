@@ -54,11 +54,11 @@ interface Schema {
 const invalidColumnsCache = new Map<string, Set<string>>();
 
 function filterRowColumns(
-  row: Record<string, any>,
+  row: Record<string, unknown>,
   invalidColumns: Set<string>
-): Record<string, any> {
-  const filtered: Record<string, any> = {};
-  const extra: Record<string, any> = {};
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(row)) {
     if (!invalidColumns.has(key)) {
@@ -86,7 +86,7 @@ function extractInvalidColumn(errorMessage: string): string | null {
   return match ? match[1] : null;
 }
 
-function readJsonFile(filename: string): any[] {
+function readJsonFile(filename: string): unknown[] {
   const filePath = join(DATA_DIR, filename);
 
   // Handle users.json - try temp file if main file doesn't exist
@@ -94,8 +94,13 @@ function readJsonFile(filename: string): any[] {
     try {
       const content = readFileSync(filePath, "utf-8");
       return JSON.parse(content);
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
         // Try temp file
         const tempPath = join(DATA_DIR, "users_temp.json");
         try {
@@ -117,7 +122,7 @@ function readJsonFile(filename: string): any[] {
 
 async function insertBatch(
   tableName: string,
-  rows: any[],
+  rows: unknown[],
   primaryKey: string
 ): Promise<void> {
   const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
@@ -129,9 +134,12 @@ async function insertBatch(
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
     // Filter each row to exclude invalid columns
-    const filteredBatch = batch.map((row) =>
-      filterRowColumns(row, invalidColumns)
-    );
+    const filteredBatch = batch
+      .filter(
+        (row): row is Record<string, unknown> =>
+          row !== null && typeof row === "object"
+      )
+      .map((row) => filterRowColumns(row, invalidColumns));
 
     // Use upsert with the correct primary key
     let error = (
@@ -151,9 +159,12 @@ async function insertBatch(
         console.log(`   ⚠️  Filtering out column: ${invalidColumn}`);
 
         // Retry with filtered batch
-        const retryBatch = batch.map((row) =>
-          filterRowColumns(row, invalidColumns)
-        );
+        const retryBatch = batch
+          .filter(
+            (row): row is Record<string, unknown> =>
+              row !== null && typeof row === "object"
+          )
+          .map((row) => filterRowColumns(row, invalidColumns));
         error = (
           await supabase.from(tableName).upsert(retryBatch, {
             onConflict: primaryKey,
@@ -212,9 +223,12 @@ async function insertBatch(
             console.log(`   ⚠️  Filtering out column: ${invalidCol}`);
 
             // Retry insert with filtered batch
-            const retryBatch = batch.map((row) =>
-              filterRowColumns(row, invalidColumns)
-            );
+            const retryBatch = batch
+              .filter(
+                (row): row is Record<string, unknown> =>
+                  row !== null && typeof row === "object"
+              )
+              .map((row) => filterRowColumns(row, invalidColumns));
             const { error: retryError } = await supabase
               .from(tableName)
               .insert(retryBatch);
@@ -345,9 +359,10 @@ async function main() {
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`   ✅ Completed in ${duration}s`);
-    } catch (error: any) {
-      console.error(`   ❌ ERROR: ${error.message}`);
-      if (error.message.includes("ENOENT")) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`   ❌ ERROR: ${message}`);
+      if (message.includes("ENOENT")) {
         console.error(`      File not found: ${config.file}`);
       }
       // Continue with next table
