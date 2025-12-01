@@ -19,15 +19,18 @@ export function ViewpointGroupProvider({
   children: React.ReactNode;
 }) {
   const { mutate } = useSWRConfig();
+  // Initialize with default value consistently on both server and client
   const [selectedGroupId, setSelectedGroupIdState] = React.useState<string>(
-    () => {
-      if (typeof window !== "undefined") {
-        const stored = localStorage.getItem("selectedViewpointGroupId");
-        return stored || LEADER_VIEWPOINT_GROUP_ID;
-      }
-      return LEADER_VIEWPOINT_GROUP_ID;
-    }
+    LEADER_VIEWPOINT_GROUP_ID
   );
+
+  // Sync from localStorage only after mount to avoid hydration mismatch
+  React.useEffect(() => {
+    const stored = localStorage.getItem("selectedViewpointGroupId");
+    if (stored) {
+      setSelectedGroupIdState(stored);
+    }
+  }, []); // Only run on mount
 
   const setSelectedGroupId = React.useCallback(
     (groupId: string) => {
