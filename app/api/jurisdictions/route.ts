@@ -47,7 +47,16 @@ export async function GET(request: Request) {
       }
     });
 
-    return NextResponse.json(jurisdictions);
+    // Add caching headers for better performance
+    // Cache for 5 minutes on the client, allow stale-while-revalidate
+    const headers = new Headers();
+    headers.set(
+      "Cache-Control",
+      "public, s-maxage=300, stale-while-revalidate=600"
+    );
+    headers.set("Content-Type", "application/json");
+
+    return NextResponse.json(jurisdictions, { headers });
   } catch (error) {
     console.error("Error fetching jurisdictions:", error);
     return NextResponse.json(

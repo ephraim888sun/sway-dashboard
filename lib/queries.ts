@@ -14,7 +14,7 @@ const SUPABASE_BATCH_SIZE = 100;
 
 /**
  * Get all supporters for the leader's network by jurisdiction
- * Uses separate queries for better performance
+ * Optimized with parallel batch queries and efficient data structures
  */
 export async function getSupportersByJurisdiction(
   viewpointGroupId?: string
@@ -22,7 +22,7 @@ export async function getSupportersByJurisdiction(
   const { getViewpointGroupNetwork } = await import("./leader-context");
   const networkIds = await getViewpointGroupNetwork(viewpointGroupId);
 
-  // Get all supporters
+  // Get all supporters - this is already optimized with the composite index
   const { data: supporters, error: supportersError } = await getSupabase()
     .from("profile_viewpoint_group_rels")
     .select("profile_id, created_at")
@@ -36,98 +36,109 @@ export async function getSupportersByJurisdiction(
 
   const profileIds = supporters.map((s) => s.profile_id).filter(Boolean);
 
-  // If no profile IDs, return empty map
   if (profileIds.length === 0) {
     return new Map();
   }
 
-  // Get profiles with person IDs (batch if needed)
+  // Parallelize batch queries for profiles
+  const profileBatches = [];
+  for (let i = 0; i < profileIds.length; i += SUPABASE_BATCH_SIZE) {
+    profileBatches.push(profileIds.slice(i, i + SUPABASE_BATCH_SIZE));
+  }
+
+  const profilePromises = profileBatches.map((batch) =>
+    getSupabase().from("profiles").select("id, person_id").in("id", batch)
+  );
+
+  const profileResults = await Promise.all(profilePromises);
   const allProfiles: { id: string; person_id: string | null }[] = [];
 
-  for (let i = 0; i < profileIds.length; i += SUPABASE_BATCH_SIZE) {
-    const batch = profileIds.slice(i, i + SUPABASE_BATCH_SIZE);
-    const { data: profiles, error: profilesError } = await getSupabase()
-      .from("profiles")
-      .select("id, person_id")
-      .in("id", batch);
-
-    if (profilesError) {
-      console.error("Error fetching profiles:", profilesError);
-      continue; // Continue with other batches
+  for (const result of profileResults) {
+    if (result.error) {
+      console.error("Error fetching profiles batch:", result.error);
+      continue;
     }
-
-    if (profiles) {
-      allProfiles.push(...profiles);
+    if (result.data) {
+      allProfiles.push(...result.data);
     }
   }
 
-  const profiles = allProfiles;
+  const personIds = [
+    ...new Set(allProfiles.map((p) => p.person_id).filter(Boolean)),
+  ];
 
-  const personIds = profiles.map((p) => p.person_id).filter(Boolean);
-
-  // If no person IDs, return empty map
   if (personIds.length === 0) {
     return new Map();
   }
 
-  // Get voter verifications (batch if needed)
-  const allVoterVerifications: { id: string; person_id: string }[] = [];
-
+  // Parallelize batch queries for voter verifications
+  const personBatches = [];
   for (let i = 0; i < personIds.length; i += SUPABASE_BATCH_SIZE) {
-    const batch = personIds.slice(i, i + SUPABASE_BATCH_SIZE);
-    const { data: voterVerifications, error: vvError } = await getSupabase()
+    personBatches.push(personIds.slice(i, i + SUPABASE_BATCH_SIZE));
+  }
+
+  const vvPromises = personBatches.map((batch) =>
+    getSupabase()
       .from("voter_verifications")
       .select("id, person_id")
-      .in("person_id", batch);
+      .in("person_id", batch)
+  );
 
-    if (vvError) {
-      console.error("Error fetching voter verifications:", vvError);
-      continue; // Continue with other batches
+  const vvResults = await Promise.all(vvPromises);
+  const allVoterVerifications: { id: string; person_id: string }[] = [];
+
+  for (const result of vvResults) {
+    if (result.error) {
+      console.error("Error fetching voter verifications batch:", result.error);
+      continue;
     }
-
-    if (voterVerifications) {
-      allVoterVerifications.push(...voterVerifications);
+    if (result.data) {
+      allVoterVerifications.push(...result.data);
     }
   }
 
-  const voterVerifications = allVoterVerifications;
+  const vvIds = allVoterVerifications.map((vv) => vv.id).filter(Boolean);
 
-  const vvIds = voterVerifications.map((vv) => vv.id).filter(Boolean);
-
-  // If no voter verification IDs, return empty map
   if (vvIds.length === 0) {
     return new Map();
   }
 
-  // Get jurisdiction relations (batch if needed)
+  // Parallelize batch queries for jurisdiction relations
+  const vvBatches = [];
+  for (let i = 0; i < vvIds.length; i += SUPABASE_BATCH_SIZE) {
+    vvBatches.push(vvIds.slice(i, i + SUPABASE_BATCH_SIZE));
+  }
+
+  const jrPromises = vvBatches.map((batch) =>
+    getSupabase()
+      .from("voter_verification_jurisdiction_rels")
+      .select("voter_verification_id, jurisdiction_id")
+      .in("voter_verification_id", batch)
+  );
+
+  const jrResults = await Promise.all(jrPromises);
   const allJurisdictionRels: {
     voter_verification_id: string;
     jurisdiction_id: string;
   }[] = [];
 
-  for (let i = 0; i < vvIds.length; i += SUPABASE_BATCH_SIZE) {
-    const batch = vvIds.slice(i, i + SUPABASE_BATCH_SIZE);
-    const { data: jurisdictionRels, error: jrError } = await getSupabase()
-      .from("voter_verification_jurisdiction_rels")
-      .select("voter_verification_id, jurisdiction_id")
-      .in("voter_verification_id", batch);
-
-    if (jrError) {
-      console.error("Error fetching jurisdiction relations:", jrError);
-      continue; // Continue with other batches
+  for (const result of jrResults) {
+    if (result.error) {
+      console.error(
+        "Error fetching jurisdiction relations batch:",
+        result.error
+      );
+      continue;
     }
-
-    if (jurisdictionRels) {
-      allJurisdictionRels.push(...jurisdictionRels);
+    if (result.data) {
+      allJurisdictionRels.push(...result.data);
     }
   }
 
-  const jurisdictionRels = allJurisdictionRels;
-
-  // Build maps for efficient lookup
-  const profileToPerson = new Map(profiles.map((p) => [p.id, p.person_id]));
+  // Build maps for efficient lookup - use Sets for deduplication
+  const profileToPerson = new Map(allProfiles.map((p) => [p.id, p.person_id]));
   const personToVVs = new Map<string, string[]>();
-  voterVerifications.forEach((vv) => {
+  allVoterVerifications.forEach((vv) => {
     if (!vv.person_id) return;
     if (!personToVVs.has(vv.person_id)) {
       personToVVs.set(vv.person_id, []);
@@ -135,7 +146,7 @@ export async function getSupportersByJurisdiction(
     personToVVs.get(vv.person_id)!.push(vv.id);
   });
   const vvToJurisdictions = new Map<string, string[]>();
-  jurisdictionRels.forEach((jr) => {
+  allJurisdictionRels.forEach((jr) => {
     if (!vvToJurisdictions.has(jr.voter_verification_id)) {
       vvToJurisdictions.set(jr.voter_verification_id, []);
     }

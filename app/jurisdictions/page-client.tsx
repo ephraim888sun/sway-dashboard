@@ -22,7 +22,11 @@ function LoadingSkeleton() {
 
 function JurisdictionsContent() {
   const { selectedGroupId } = useViewpointGroup();
-  const { data: jurisdictionsData = [], error: swrError, isLoading } = useJurisdictions(selectedGroupId);
+  const {
+    data: jurisdictionsData = [],
+    error: swrError,
+    isLoading,
+  } = useJurisdictions(selectedGroupId);
 
   // Sort by supporter share descending (default)
   const jurisdictions = React.useMemo(() => {
@@ -33,7 +37,11 @@ function JurisdictionsContent() {
     });
   }, [jurisdictionsData]);
 
-  const error = swrError ? (swrError instanceof Error ? swrError.message : "Failed to load jurisdictions") : null;
+  const error = swrError
+    ? swrError instanceof Error
+      ? swrError.message
+      : "Failed to load jurisdictions"
+    : null;
 
   if (isLoading) {
     return <LoadingSkeleton />;
