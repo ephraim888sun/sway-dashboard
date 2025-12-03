@@ -713,8 +713,6 @@ export async function getUpcomingElectionsClient(
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + daysAhead);
 
-    const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
-
     // Fetch elections
     const { data: elections, error: electionsError } = await supabase
       .from("elections")
@@ -860,7 +858,6 @@ export async function getElectionDetailClient(
 ): Promise<ElectionDetail | null> {
   return retryWithBackoff(async () => {
     const supabase = createClientClient();
-    const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
 
     // Get election details
     const { data: election, error: electionError } = await supabase
@@ -916,8 +913,6 @@ export async function getElectionDetailClient(
       ballotItems.map(async (bi) => {
         const jurisdiction = bi.jurisdictions as { name?: string } | null;
         const jurisdictionId = bi.jurisdiction_id;
-        const supporterCount =
-          supportersByJurisdiction.get(jurisdictionId)?.profileIds.size || 0;
 
         const { data: races } = await supabase
           .from("races")

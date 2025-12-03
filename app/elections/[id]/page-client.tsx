@@ -89,7 +89,7 @@ export default function ElectionDetailContent({ id }: { id: string }) {
           <CardTitle>Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex items-center gap-3">
               <IconUsers className="h-8 w-8 text-muted-foreground" />
               <div>
@@ -98,19 +98,6 @@ export default function ElectionDetailContent({ id }: { id: string }) {
                 </div>
                 <div className="text-2xl font-bold">
                   {election.summary.supportersInScope.toLocaleString()}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <IconTarget className="h-8 w-8 text-muted-foreground" />
-              <div>
-                <div className="text-sm text-muted-foreground">
-                  Supporter Share
-                </div>
-                <div className="text-2xl font-bold">
-                  {election.summary.supporterShareInScope !== null
-                    ? `${election.summary.supporterShareInScope.toFixed(1)}%`
-                    : "N/A"}
                 </div>
               </div>
             </div>
@@ -146,24 +133,17 @@ export default function ElectionDetailContent({ id }: { id: string }) {
                 <div key={race.ballotItemId} className="border rounded-lg p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h3 className="font-semibold text-lg">
-                        #{index + 1} {race.title || "Untitled Race"}
+                      <h3 className="font-semibold text-md ">
+                        #{index + 1}{" "}
+                        {race.race?.officeName && (
+                          <span className="">
+                            {race.race.officeName}
+                            {race.race.officeDistrict &&
+                              ` - ${race.race.officeDistrict}`}
+                          </span>
+                        )}
                       </h3>
-                      {race.race?.officeName && (
-                        <p className="text-sm text-muted-foreground">
-                          {race.race.officeName}
-                          {race.race.officeDistrict &&
-                            ` - ${race.race.officeDistrict}`}
-                        </p>
-                      )}
                     </div>
-                    <Badge
-                      variant={
-                        race.influenceScore >= 70 ? "default" : "outline"
-                      }
-                    >
-                      Score: {race.influenceScore.toFixed(0)}
-                    </Badge>
                   </div>
                   {race.race?.candidates && race.race.candidates.length > 0 && (
                     <div className="mt-3">
@@ -171,7 +151,7 @@ export default function ElectionDetailContent({ id }: { id: string }) {
                       <div className="flex flex-wrap gap-2">
                         {race.race.candidates.map((candidate) => (
                           <Badge key={candidate.candidacyId} variant="outline">
-                            {candidate.candidateName || "Unknown"}
+                            {candidate.candidateName || "N/A"}
                             {candidate.partyName && ` (${candidate.partyName})`}
                           </Badge>
                         ))}
@@ -198,26 +178,15 @@ export default function ElectionDetailContent({ id }: { id: string }) {
               <div key={item.ballotItemId} className="border rounded-lg p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1">
-                    <h3 className="font-semibold">
-                      {item.title || "Untitled"}
+                    <h3 className="text-md font-semibold">
+                      Jurisdiction: {item.jurisdictionName || "N/A"}
                     </h3>
-                    {item.description && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {item.description}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {item.jurisdictionName || "Unknown Jurisdiction"}
-                    </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <Badge
                       variant={item.type === "race" ? "default" : "secondary"}
                     >
                       {item.type === "race" ? "Race" : "Measure"}
-                    </Badge>
-                    <Badge variant="outline">
-                      Influence: {item.influenceScore.toFixed(0)}
                     </Badge>
                   </div>
                 </div>
@@ -304,25 +273,21 @@ export default function ElectionDetailContent({ id }: { id: string }) {
                 <TableRow>
                   <TableHead>Jurisdiction</TableHead>
                   <TableHead>Supporters</TableHead>
-                  <TableHead>Share</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {election.jurisdictionBreakdown.map((jurisdiction) => (
-                  <TableRow key={jurisdiction.jurisdictionId}>
-                    <TableCell className="font-medium">
-                      {jurisdiction.jurisdictionName || "Unknown"}
-                    </TableCell>
-                    <TableCell>
-                      {jurisdiction.supporterCount.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      {jurisdiction.supporterShare !== null
-                        ? `${jurisdiction.supporterShare.toFixed(1)}%`
-                        : "N/A"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {election.jurisdictionBreakdown
+                  .sort((a, b) => b.supporterCount - a.supporterCount)
+                  .map((jurisdiction) => (
+                    <TableRow key={jurisdiction.jurisdictionId}>
+                      <TableCell className="font-medium">
+                        {jurisdiction.jurisdictionName || "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        {jurisdiction.supporterCount.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
           </CardContent>
