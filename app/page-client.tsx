@@ -95,7 +95,7 @@ function DashboardContent() {
             </div>
           </div>
           <ChartAreaInteractive
-            data={timeSeriesData}
+            data={timeSeriesData || null}
             isLoading={timeSeriesLoading}
           />
         </div>
