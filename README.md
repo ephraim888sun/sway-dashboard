@@ -1,288 +1,407 @@
-# Implementation Approach
+# Dashboard Documentation
 
-- Clarify the core questions the dashboard must answer
-- Define the metrics and data model to support those questions
-- Design the UX: pages, sections, charts, and flows
-- Implement: how you’d structure the Next.js app + APIs + calculations
+https://github.com/ephraim888sun/sway-dashboard
 
-## 1. Questions
-For this product, the leader really cares about:
+## Overview
 
-- Where do I have real political leverage right now?
-- How is my influence changing over time?
-- In which upcoming elections or races can I actually matter?
-- What should I do next (and where) to increase impact?
+The Sway Dashboard provides a comprehensive view of supporter influence, electoral opportunities, and geographic distribution across jurisdictions and elections. It enables leaders to identify actionable opportunities where their verified supporters can make an impact in upcoming elections.
 
-So the dashboard should guide them through:
-- A summary of their current influence.
-- A trend view: how it’s changing.
-- A contextual view: geography and elections.
-- A call-to-action: where to focus.
+### Key Value Propositions
 
-Keep this mental model: each screen/section should answer one of those questions obviously.
+- **Real Voter Access**: Only counts verified supporters with jurisdiction data, ensuring metrics reflect actual voting capability
+- **Actionable Timeframes**: Focuses on elections within the next 90 days, providing a realistic window for engagement
+- **Geographic Intelligence**: Identifies where supporter concentration aligns with electoral opportunities
+- **Performance Optimized**: Uses materialized views and intelligent caching for fast, responsive queries
 
-## 2. Define metrics and how to compute them
-Use the dataset you have (leader, supporters, jurisdictions, elections, races, measures, influence targets).
+![Main Dashboard Overview](docs/screenshots/dashboard-overview.png)
+*Main dashboard view showing summary metrics, supporter growth chart, top states, and election insights*
 
-Core metrics
-You already have three strong pillars:
+---
 
-- Supporters per Jurisdiction & % of Electorate
-- Supporter Growth Over Time
-- Active Supporter Rate
+## Metrics Calculation
 
- 1. Supporters per Jurisdiction & % of Electorate
-Represents political leverage in a place.
+The dashboard calculates several key metrics to provide actionable insights into supporter influence and electoral opportunities.
 
-Conceptual computation:
+### Total Supporters
 
-Take all verified supporters of this leader.
-Map each to one or more jurisdiction_id via voter verification.
-Aggregate:
-supporter_count_j = count(supporters in jurisdiction j)
-estimated_turnout_j (external or assumed)
-supporter_share_j = supporter_count_j / estimated_turnout_j
+Counts all supporters in the viewpoint group network, including those without voter verification. This provides a baseline understanding of the total supporter base.
 
- 2. Supporter Growth Over Time
-Shows momentum.
+**Calculation**: Aggregates all `profile_viewpoint_group_rels` records where `type = 'supporter'` across the viewpoint group network.
 
-Conceptual computation:
+### Verified Supporters
 
-For each supporter, use created_at or first_seen_at.
-Bucket by week/month.
-Metrics:
-new_supporters_t
-cumulative_supporters_t
+Counts only supporters who have completed voter verification and have associated jurisdiction data. This metric represents supporters who can actually vote in elections.
 
-3. Active Supporter Rate
-Shows engagement depth, not just size.
+**Calculation**: Joins `profile_viewpoint_group_rels` with `voter_verifications` and `voter_verification_jurisdiction_rels` to count supporters with verified voting capability.
 
-Conceptual computation:
 
-Define “active” as any recorded engagement in last X days (events, actions, etc. — you’ll need to infer or mock from available timestamps).
-Per time window:
-active_supporters = distinct supporters with activity in last X days
-active_rate = active_supporters / total_supporters
+### Elections with Access
 
-### Contextual / comparative metrics
-You need at least one metric that varies by location or election.
+Counts upcoming elections (within 90 days) where verified supporters have jurisdiction-based access to vote on ballot items.
 
-Good ones:
+**Calculation**: 
+1. Identifies elections with `poll_date >= CURRENT_DATE` and `poll_date <= CURRENT_DATE + 90 days`
+2. Matches ballot items in those elections to jurisdictions where supporters are verified
+3. Counts elections where `supportersInScope > 0`
 
-1. Influence by Jurisdiction (comparative)
+### Total Ballot Items
 
-For each jurisdiction:
-supporter_share_j
-active_rate_j
-trend_j (supporter growth in last 30 days)
+Sums all races and measures in upcoming elections (next 90 days) where supporters have jurisdiction-based access.
 
-2. Influence by Upcoming Election
+**Calculation**: Aggregates `ballot_items` count from elections where supporters have access.
 
-For each election in the next N days:
-total_supporters_in_election_scope
-supporter_share_in_scope
-Count of influence targets in that election aligned with leader’s viewpoint groups.
 
-3. Race/Measure Influence Score
+### State Distribution
 
-For each race/measure tagged as an influence target for this leader’s viewpoints:
-supporters_in_relevant_jurisdiction(s)
-supporter_share_of_turnout
-Combined into a simple influence_score (0–100) so they can rank opportunities.
+Geographic breakdown showing supporter counts and jurisdiction counts by state, sorted by supporter count.
 
-The exact formulas can be simple; what matters is that they’re interpretable and consistent.
+**Metrics**:
+- `supporterCount`: Total verified supporters in the state
+- `jurisdictionCount`: Number of jurisdictions with supporters in the state
 
-## 3. UX design: what the dashboard should look like
-Think in three main views:
+**Calculation**: Groups supporters by state through jurisdiction relationships, aggregates counts.
 
-### A. Overview page (default)
-Goal: immediate answer to “How strong is my influence right now, and where?”
+---
 
-Sections:
-
-1. Top-level summary cards
-At the top, 3–4 “hero” metrics:
-
-Total Supporters
-Active Supporters (last 30 days) + % Active
-Top Jurisdiction by Share e.g. “District 5: 4,200 supporters ≈ 7.8% of turnout”
-High-Leverage Upcoming Elections e.g. “3 elections in next 90 days where you’re ≥5% of expected turnout”
-Each card can include a tiny sparkline (trend over last 90 days).
-
-2. Influence over time chart
-A main line chart with:
-
-X-axis: time (weekly or monthly)
-Lines:
-total supporters
-active supporters
-Optional: area highlighting big jumps or plateaus.
-This fulfills the “change over time” requirement and gives a gut sense of growth.
-
-3. Influence by geography (comparative)
-A table or choropleth-style map (MVP: table + bar chart):
-
-Columns:
-jurisdiction name
-supporter_count
-supporter_share_of_turnout
-active_rate
-30-day growth %
-Default sort by supporter_share_of_turnout or growth.
-This answers “Where are my strongholds vs. growth markets?”
-
-### B. Elections & races view
-Goal: tie influence to specific political events (where they can act).
-
-1. Upcoming elections list
-For elections in next N days:
-
-Election name, date, scope.
-supporters_in_scope
-supporter_share_in_scope
-# of influence targets (races/measures) relevant to your viewpoints.
-Clicking into an election shows:
-
-2. Election detail
-Short summary: “You have 4,200 supporters in this election’s area (~6.3% of typical turnout).”
-List of key races/measures (influence targets):
-race/measure name
-office / topic tags (via viewpoint groups)
-jurisdiction
-your influence_score
-A call-to-action style insight:
-“Top 3 races where your base could be decisive.”
-
-### C. Jurisdictions view
-Goal: more “geo-ops”-style view.
-
-Table (or segmented controls) listing:
-strongholds (high share, high active)
-sleeping giants (high count, low active)
-emerging markets (low count but high growth)
-Each row links to a breakdown: timeline of growth, upcoming elections in that jurisdiction, and relevant influence targets.
-
-## 4. Making insights “actionable”
-Actionable means: they can clearly see a next step.
-
-Design your summaries like this:
-
-Instead of:
-
-“You have 3,472 supporters in District 5.”
-Prefer:
-
-“You have 3,472 supporters in District 5, ≈6.1% of typical turnout. A city council race you care about is in 27 days here. This is a high-leverage opportunity.”
-Concretely:
-
-Highlight “High Leverage Opportunities”
-
-Condition: supporter_share > threshold AND election in next X days.
-Show a short list with rank, and a “why this matters” tag (e.g. Climate, Housing from viewpoint groups).
-Highlight “Wake-up Zones”
-
-Many supporters but active_rate < threshold.
-Suggest: “Re-engage your base here before Election Y.”
-Highlight “Growth Hotspots”
-
-High growth % last 30 days.
-Suggest: “Your community is growing fastest in Z; consider focusing your next push there.”
-Even if you don’t implement actual messaging tools, the phrasing of sections and metric groupings should hint: this is where you’d go do something.
-
-## 5. Implementation approach (Next.js + TypeScript)
-Here’s a sane architecture for a take-home:
-
-Data layer & modeling
-You have JSONs; treat them like a small relational DB.
-
-For a real app, you’d likely:
-
-Load JSONs into a Postgres or SQLite DB (e.g. via Prisma).
-Model main tables:
-Election, BallotItem, Race, Measure
-Office, OfficeTerm, Jurisdiction
-Person, Profile, VoterVerification
-InfluenceTarget, ViewpointGroup, join tables
-For the take-home, you can:
-
-Load JSONs server-side into memory at startup.
-Precompute derived tables/aggregations:
-supporters per jurisdiction
-supporters per election
-influence targets per viewpoint
-Expose read-only APIs:
-
-GET /api/summary – top-level metrics
-GET /api/time-series – growth over time
-GET /api/jurisdictions – comparative table
-GET /api/elections – upcoming elections with influence scores
-GET /api/elections/[id] – election detail view
-TypeScript interfaces to keep things clear, e.g.:
-
- Download
- Copy
-type JurisdictionInfluence = {
-  jurisdictionId: string;
-  name: string;
-  supporterCount: number;
-  estimatedTurnout: number | null;
-  supporterShare: number | null;
-  activeSupporterCount: number;
-  activeRate: number;
-  growth30d: number;
-};
-Next.js structure
-Use the App Router:
-
-app/
-page.tsx – Overview
-jurisdictions/page.tsx
-elections/page.tsx
-elections/[id]/page.tsx
-api/summary/route.ts
-api/jurisdictions/route.ts
-etc.
-On the frontend:
-
-Use React Query or simple fetch hooks.
-Use a chart library (e.g. Recharts, Nivo, or Chart.js) for:
-time series line chart
-bar chart for jurisdiction comparison
-Use a table library or basic table components.
-Where to calculate metrics
-For this assignment, I’d:
-
-Do the heavier joins & aggregations server-side (in the API routes).
-Cache results in memory (simple module-level cache or in-memory store) since data is static.
-Keep the frontend purely presentational + filtering/sorting.
-6. A phased plan (3–4 hours realistic path)
-If you were actually doing this in the allotted time:
-
-Hour 0–1: Data + metrics
-
-Load JSONs, build a small Node/TS script (or API) that:
-connects persons → voter verifications → jurisdictions
-computes supporters per jurisdiction
-builds a basic time series of supporter counts.
-Hour 1–2: API + basic pages
-
-Create summary, jurisdictions, and time-series endpoints.
-Build the Overview page:
-summary cards
-time series chart.
-Hour 2–3: Comparative views + elections
-
-Jurisdictions page with sortable table.
-Basic Upcoming Elections view:
-for now, show elections, supporter counts, simple scores.
-Hour 3–4: Polish & insights
-
-Add “High Leverage Opportunities” section.
-Add explanatory copy below charts (“What this means / What to do”).
-Clean up visuals; ensure types and data sanity.
-If you want, I can next:
-
-Sketch specific API route shapes (request/response) for one or two endpoints, or
-Propose concrete React component structure for the Overview page (which cards, which props, which hooks).
+## Visualization Strategies
 
+The dashboard employs multiple visualization techniques to make data accessible and actionable.
 
+### Summary Cards
+
+A responsive grid layout displaying the four key metrics: Total Supporters, Verified Supporters, Elections with Access, and Total Ballot Items.
+
+![Time Series Chart](docs/screenshots/summary-cards.png)
+
+### Time Series Charts
+
+Interactive area charts showing supporter growth trends with dual metrics overlay.
+
+![Time Series Chart](docs/screenshots/time-series-chart.png)
+*Supporter growth chart showing daily, weekly, and monthly trends*
+
+### State Distribution
+
+Ranked list visualization showing top states by supporter count with contextual information.
+
+**Features**:
+- Ranked list (top 10) with numbered badges
+- Percentage calculation showing concentration (e.g., "Top 2 states represent X% of base")
+
+![State Distribution](docs/screenshots/time-series-chart.png)
+
+
+### Election Insights
+
+Highlights the top election opportunity with detailed breakdown, followed by a ranked list of other elections.
+
+**Features**:
+- **Actionable Details**: Poll date, supporter count, ballot item breakdown
+- **Ranked List**: Secondary elections with key metrics
+
+![Election Insights](docs/screenshots/election-insights.png)
+*Top election opportunities with supporter access metrics*
+
+### Jurisdiction Table
+
+Sortable, paginated data table for detailed jurisdiction analysis.
+
+![Jurisdiction Table](docs/screenshots/jurisdiction-table.png)
+*Sortable jurisdiction table with supporter and election metrics*
+
+---
+
+## Actionable Insights
+
+The dashboard is designed to surface insights that leaders can act upon immediately. Here's what makes an insight "actionable":
+
+### Real Voter Access
+
+Only verified supporters with jurisdiction data are counted in influence metrics.
+
+### Actionable Timeframes
+
+ Focus on elections within the next 90 days.
+
+### Top Opportunities
+
+**Principle**: Highlight elections with the most supporters in scope.
+
+**Rationale**: Elections with more supporters represent higher-leverage opportunities where engagement efforts can have maximum impact.
+
+### Geographic Concentration
+
+**Principle**: Identify states and jurisdictions with highest supporter density relative to opportunities.
+
+**Rationale**: Concentrated supporter bases in jurisdictions with upcoming elections represent the most efficient use of engagement resources.
+
+
+## Technical Stack
+
+- **Frontend**: Next.js 14 (App Router), React, TypeScript
+- **Styling**: Tailwind CSS, shadcn/ui components
+- **Charts**: Recharts
+- **Data Fetching**: SWR (stale-while-revalidate)
+- **Database**: Supabase (PostgreSQL)
+- **State Management**: React Context API
+- **Table**: TanStack Table (React Table)
+
+---
+
+## Part 3: Future Evolution
+
+### Shortcuts, Simplifications, and Assumptions
+
+#### Hardcoded Configuration Values
+
+- **90-Day Election Window**: The timeframe for "upcoming elections" is hardcoded to 90 days throughout the application. This was chosen as a reasonable balance between actionable opportunities and data volume, but limits flexibility for different use cases.
+
+- **Leader Viewpoint Group ID**: The primary leader's viewpoint group ID is focused solely on (`LEADER_VIEWPOINT_GROUP_ID`).
+
+#### Client-Side Query Architecture
+
+- **No API Routes**: All database queries run client-side using the Supabase client library. This eliminates API route overhead and enables real-time updates, but transfers query complexity and data processing to the browser.
+
+- **Direct Database Access**: Queries bypass a server-side caching layer, meaning every page load triggers fresh database queries. This ensures data freshness but increases load times and database load.
+
+#### Materialized View Refresh Strategy
+
+- **Manual Refresh**: Materialized views require manual refresh via SQL functions. While refresh scripts exist, there's no automated scheduling (no pg_cron, Edge Functions, or external cron jobs configured).
+
+- **Refresh Timing**: Views are refreshed on-demand rather than on a schedule, which can lead to stale data if not refreshed regularly.
+
+#### Network Expansion Limitations
+
+- **One-Level Depth**: Viewpoint group network expansion only goes one level deep: primary group → supporters → their leader groups. This doesn't handle deeper hierarchies or complex multi-level networks.
+
+- **Sequential Processing**: Network expansion processes supporter profile IDs in batches sequentially, which can be slow for large supporter bases.
+
+#### Query Batching Constraints
+
+- **Fixed Batch Size**: Supabase `.in()` queries are limited to 100 items per batch. Large queries require multiple sequential batch operations, increasing latency.
+
+- **No Query Result Caching**: First-time queries always hit the database, with no server-side result caching to speed up subsequent requests.
+
+#### Time Series Data Processing
+
+- **Client-Side Fallback**: Daily time series data falls back to client-side calculation when materialized views don't contain daily data. This involves fetching all supporter records and aggregating in JavaScript, which is memory-intensive.
+
+### Scaling Concerns: What Breaks at 100k Supporters or 100k Leaders?
+
+Several components would break or require significant redesign at scale:
+
+#### Network Expansion Queries
+
+**Current Behavior**: For a leader with 100k supporters, network expansion would:
+- Fetch 100k supporter profile IDs
+- Execute 1,000 sequential batch queries (100 items each) to find leader groups
+- Potentially return thousands of viewpoint groups
+- Block other queries until completion
+
+**Impact**: Initial page load could take 30+ seconds, with hundreds of sequential database round-trips. Not Scalable
+
+**Solution**: Compute data intensive resources on a separate server rather than in the frontend - either from a backend server with caching or computation on the database level.
+
+#### Batch Processing Overhead
+
+**Current Behavior**: Large queries (jurisdictions, ballot items) are processed in batches of 100, requiring sequential round-trips.
+
+**Impact**: With 10,000+ jurisdictions, jurisdiction detail fetching alone requires 100+ sequential queries, adding significant latency.
+
+**Solution**: Use PostgreSQL array operations or bulk queries to fetch all data in fewer round-trips.
+
+#### Client-Side Memory and Processing
+
+**Current Behavior**: Time series calculations, supporter deduplication, and aggregations happen in browser JavaScript.
+
+**Impact**: 
+- Browser memory exhaustion with large datasets
+- UI freezing during heavy computations
+- Poor performance on mobile devices
+
+**Solution**: Move aggregations to server-side API routes or database functions. Note - was having trouble in this project to properly service the corresponding data. I had some data config issue - so decided to move form this.
+
+#### Materialized View Refresh Times
+
+**Current Behavior**: Materialized views refresh all data from scratch, scanning millions of rows.
+
+**Impact**: 
+- Refresh times increase from minutes to hours
+- Concurrent refresh operations could lock tables
+- Stale data periods become longer
+
+**Solution**: Implement incremental refresh strategies, partition materialized views, or use streaming updates.
+
+#### Network Transfer Bottlenecks
+
+**Current Behavior**: Large JSON payloads (supporters by jurisdiction, time series data) transferred over network on every page load.
+
+**Impact**: 
+- Slow initial page loads (10+ seconds for large datasets)
+- High bandwidth costs
+- Poor mobile experience
+
+**Solution**: Implement pagination, data compression, or progressive loading strategies.
+
+### New Capabilities at Scale
+
+At scale, new capabilities would unlock additional value:
+
+#### Cross-Leader Analytics
+
+- **Comparative Analysis**: Compare supporter growth, engagement rates, and electoral opportunities across multiple leaders or viewpoint groups.
+
+- **Network Effects**: Analyze how supporter networks overlap and influence each other.
+
+- **Best Practices**: Identify leaders with highest engagement rates and surface their strategies.
+
+#### Predictive Modeling
+
+- **Election Outcome Prediction**: Use historical data and supporter engagement patterns to predict election outcomes.
+
+- **Engagement Forecasting**: Predict supporter growth and engagement trends.
+
+- **Opportunity Scoring**: ML-based scoring of electoral opportunities based on supporter concentration, historical turnout, and other factors.
+
+#### Real-Time Updates
+
+- **Live Supporter Counts**: Real-time updates as supporters join or verify.
+
+- **Election Alerts**: Push notifications for new elections matching supporter jurisdictions.
+
+- **Engagement Tracking**: Real-time tracking of supporter engagement with campaigns.
+
+#### Advanced Caching Strategies
+
+- **Redis Layer**: Server-side caching layer for frequently accessed queries.
+
+- **CDN Caching**: Cache static or semi-static data at edge locations.
+
+- **Query Result Caching**: Cache expensive query results with smart invalidation.
+
+- **Incremental Updates**: Only refresh changed data rather than full materialized views.
+
+### What to Build Next
+
+Priority order for next development:
+
+#### 1. API Routes for Server-Side Processing
+
+**Why**: Move heavy computations off the client, reduce network transfer, and enable better caching.
+
+**Implementation**: Create Next.js API routes that handle network expansion, time series aggregation, and jurisdiction queries server-side.
+
+**Impact**: Dramatically improves initial page load times and enables scaling to larger datasets.
+
+#### 2. Automated Materialized View Refresh
+
+**Why**: Ensure data freshness without manual intervention.
+
+**Implementation**: Set up pg_cron, Supabase Edge Functions, or external cron jobs to refresh views every 15-30 minutes.
+
+**Impact**: Eliminates stale data issues and reduces operational overhead.
+
+
+#### 4. Incremental Data Loading
+
+**Why**: Improve perceived performance and reduce initial load times.
+
+**Implementation**: Load critical metrics first, then progressively load detailed data (jurisdictions, elections) as user scrolls or interacts.
+
+**Impact**: Faster time-to-interactive, better mobile experience.
+
+#### 5. Query Result Caching
+
+**Why**: Speed up subsequent page loads and reduce database load.
+
+**Implementation**: Add Redis or in-memory caching layer for expensive queries with smart invalidation based on data freshness requirements.
+
+**Impact**: Near-instant page loads for cached queries, reduced database load.
+
+#### 6. Pagination and Virtualization
+
+**Why**: Handle large datasets without overwhelming the browser.
+
+**Implementation**: Paginate jurisdiction tables, virtualize long lists, and implement infinite scroll where appropriate.
+
+**Impact**: Smooth performance even with 100k+ records.
+
+---
+
+## Technical Decisions
+
+This section documents the key technical tradeoffs made during implementation.
+
+### Client-Side vs Server-Side Queries
+
+**Decision**: All queries run client-side using Supabase client library.
+
+**Main Problem**: I had some difficulty trying to utilize server side with Supabase, but didn't get it to work properly. Ended up just using frontend but at the sacrifice of speed.
+
+**Tradeoffs**:
+- ✅ **Pros**: Real-time updates, no API route overhead, direct database access with RLS policies, simpler architecture
+- ❌ **Cons**: Query complexity in browser, large data transfers, no server-side caching, browser performance limitations
+
+**Rationale**: For MVP, client-side queries provided faster development and real-time capabilities. At scale, server-side API routes would be necessary for performance.
+
+**Future**: Migrate heavy queries to API routes while keeping lightweight queries client-side.
+
+### Materialized Views vs Real-Time Queries
+
+**Decision**: Use materialized views for expensive aggregations, refreshed periodically.
+
+**Tradeoffs**:
+- ✅ **Pros**: Dramatically faster queries (100x+), reduced database load, enables complex aggregations
+- ❌ **Cons**: Stale data (15-30 min delay), refresh overhead, storage requirements
+
+**Rationale**: Materialized views were essential for query performance with current data volumes. The tradeoff of slightly stale data was acceptable for dashboard metrics.
+
+**Future**: Implement incremental refresh and more frequent updates for critical metrics.
+
+### Batch Processing Strategy
+
+**Decision**: Process large queries in batches of 100 items to respect Supabase `.in()` limits.
+
+**Tradeoffs**:
+- ✅ **Pros**: Works within Supabase constraints, handles large datasets
+- ❌ **Cons**: Sequential round-trips add latency, complex error handling, potential for partial failures
+
+**Rationale**: Batch processing was necessary to work within Supabase's query limits. The sequential approach was simpler than parallel batches with coordination.
+
+**Future**: Use PostgreSQL array operations or bulk queries to reduce round-trips.
+
+### SWR Caching Strategy
+
+**Decision**: Use SWR with `revalidateOnFocus: false`, `revalidateOnMount: true`, `keepPreviousData: true`.
+
+**Tradeoffs**:
+- ✅ **Pros**: Fast subsequent loads, smooth transitions when switching viewpoint groups, background revalidation
+- ❌ **Cons**: First load always hits database, no server-side caching, cache invalidation complexity
+
+**Rationale**: SWR provides good UX with minimal configuration. The caching helps with perceived performance but doesn't solve initial load times.
+
+**Future**: Add server-side caching layer above SWR for even better performance.
+
+### Parallel Data Fetching
+
+**Decision**: Fetch multiple data sources in parallel using `Promise.all()` for summary metrics.
+
+**Tradeoffs**:
+- ✅ **Pros**: Faster overall load time, better resource utilization
+- ❌ **Cons**: All queries must complete before rendering, potential for waterfall effects if one query is slow
+
+**Rationale**: Parallel fetching reduces total load time compared to sequential queries. However, the slowest query determines when data appears.
+
+**Future**: Implement progressive loading where fast queries render immediately and slow queries update as they complete.
+
+### Viewpoint Group Network Expansion
+
+**Decision**: Expand networks one level deep (primary group → supporters → their leader groups).
+
+**Tradeoffs**:
+- ✅ **Pros**: Simple implementation, covers common use case, manageable query complexity
+- ❌ **Cons**: Doesn't handle deeper hierarchies, misses complex network relationships
+
+**Rationale**: One-level expansion covers the primary use case (leaders seeing their direct network) without the complexity of recursive expansion.
+
+**Future**: Implement recursive CTE-based expansion for full network trees.
