@@ -129,13 +129,117 @@ async function getViewpointGroupNetworkClient(
  * Get supporter growth time series data (client-side version)
  */
 export async function getSupporterGrowthTimeSeriesClient(
-  periodType: "weekly" | "monthly" = "monthly",
+  periodType: "daily" | "weekly" | "monthly" = "monthly",
   viewpointGroupId?: string
 ): Promise<TimeSeriesDataPoint[]> {
   return retryWithBackoff(async () => {
     const supabase = createClientClient();
     const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
 
+    // For daily queries, try materialized view first, then fall back to direct calculation
+    if (periodType === "daily") {
+      // Try materialized view first
+      const { data: mvData, error: mvError } = await supabase
+        .from("mv_time_series_supporters")
+        .select("*")
+        .in("viewpoint_group_id", networkIds)
+        .eq("period_type", "daily")
+        .order("date", { ascending: true });
+
+      if (!mvError && mvData && mvData.length > 0) {
+        return mvData.map((row) => ({
+          date: new Date(row.date).toISOString(),
+          period: row.period,
+          newSupporters: row.new_supporters,
+          cumulativeSupporters: row.cumulative_supporters,
+          activeSupporters: row.active_supporters,
+        }));
+      }
+
+      // Fall back to direct calculation if materialized view doesn't have daily data
+      // Get all supporters grouped by day
+      const { data: dailyData, error: dailyError } = await supabase
+        .from("mv_supporters_by_jurisdiction")
+        .select("created_at, profile_id, viewpoint_group_id")
+        .in("viewpoint_group_id", networkIds)
+        .not("created_at", "is", null)
+        .order("created_at", { ascending: true });
+
+      if (dailyError) {
+        console.error(
+          "Error fetching daily supporter data:",
+          dailyError
+        );
+        throw dailyError;
+      }
+
+      if (!dailyData || dailyData.length === 0) {
+        return [];
+      }
+
+      // Group by day
+      const dailyMap = new Map<string, {
+        date: Date;
+        newSupporters: Set<string>;
+      }>();
+
+      // Process each supporter record
+      dailyData.forEach((record) => {
+        const date = new Date(record.created_at);
+        const dayKey = date.toISOString().split("T")[0]; // YYYY-MM-DD
+
+        if (!dailyMap.has(dayKey)) {
+          const dayStart = new Date(date);
+          dayStart.setHours(0, 0, 0, 0);
+          dailyMap.set(dayKey, {
+            date: dayStart,
+            newSupporters: new Set(),
+          });
+        }
+
+        const dayData = dailyMap.get(dayKey)!;
+        dayData.newSupporters.add(record.profile_id);
+      });
+
+      // Calculate cumulative supporters and active supporters
+      const sortedDays = Array.from(dailyMap.entries()).sort(
+        (a, b) => a[1].date.getTime() - b[1].date.getTime()
+      );
+
+      const cumulativeSet = new Set<string>();
+      const result: TimeSeriesDataPoint[] = [];
+
+      for (const [dayKey, dayData] of sortedDays) {
+        // Add new supporters to cumulative set
+        dayData.newSupporters.forEach((id) => cumulativeSet.add(id));
+
+        // Calculate active supporters (30-day rolling window)
+        // Count distinct supporters who joined in the last 30 days up to this date
+        const dayDate = dayData.date;
+        const thirtyDaysAgo = new Date(dayDate);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const activeSet = new Set<string>();
+        for (const record of dailyData) {
+          const recordDate = new Date(record.created_at);
+          if (recordDate >= thirtyDaysAgo && recordDate <= dayDate) {
+            activeSet.add(record.profile_id);
+          }
+        }
+
+        result.push({
+          date: dayData.date.toISOString(),
+          period: dayKey,
+          newSupporters: dayData.newSupporters.size,
+          cumulativeSupporters: cumulativeSet.size,
+          activeSupporters: activeSet.size,
+        });
+      }
+
+      return result;
+    }
+
+    // For weekly/monthly, use the materialized view
     const { data, error } = await supabase
       .from("mv_time_series_supporters")
       .select("*")
@@ -160,6 +264,7 @@ export async function getSupporterGrowthTimeSeriesClient(
       period: row.period,
       newSupporters: row.new_supporters,
       cumulativeSupporters: row.cumulative_supporters,
+      activeSupporters: row.active_supporters,
     }));
   });
 }

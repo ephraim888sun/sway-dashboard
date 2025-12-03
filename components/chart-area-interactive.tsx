@@ -40,9 +40,9 @@ const chartConfig = {
     label: "Total Supporters",
     color: "hsl(var(--primary))",
   },
-  activeSupporters: {
-    label: "Active Supporters",
-    color: "hsl(var(--primary))",
+  newSupporters: {
+    label: "New Supporters",
+    color: "hsl(var(--chart-2))",
   },
 } satisfies ChartConfig;
 
@@ -79,7 +79,7 @@ export function ChartAreaInteractive({
   const chartData = data.data.map((point) => ({
     date: point.date,
     totalSupporters: point.cumulativeSupporters,
-    activeSupporters: point.newSupporters,
+    newSupporters: point.newSupporters,
   }));
 
   const filteredData = chartData.filter((item) => {
@@ -102,7 +102,7 @@ export function ChartAreaInteractive({
         <CardTitle>Supporter Growth</CardTitle>
         <CardDescription>
           <span className="hidden @[540px]/card:block">
-            Total and active supporters over time
+            Total and new supporters over time
           </span>
           <span className="@[540px]/card:hidden">Supporter growth</span>
         </CardDescription>
@@ -151,7 +151,7 @@ export function ChartAreaInteractive({
                 <stop
                   offset="5%"
                   stopColor="var(--color-totalSupporters)"
-                  stopOpacity={1.0}
+                  stopOpacity={0.8}
                 />
                 <stop
                   offset="95%"
@@ -159,15 +159,15 @@ export function ChartAreaInteractive({
                   stopOpacity={0.1}
                 />
               </linearGradient>
-              <linearGradient id="fillActive" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="fillNew" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="5%"
-                  stopColor="var(--color-activeSupporters)"
-                  stopOpacity={0.8}
+                  stopColor="var(--color-newSupporters)"
+                  stopOpacity={0.6}
                 />
                 <stop
                   offset="95%"
-                  stopColor="var(--color-activeSupporters)"
+                  stopColor="var(--color-newSupporters)"
                   stopOpacity={0.1}
                 />
               </linearGradient>
@@ -178,13 +178,25 @@ export function ChartAreaInteractive({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              minTickGap={32}
+              minTickGap={data.periodType === "daily" ? 24 : 32}
               tickFormatter={(value) => {
                 const date = new Date(value);
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                });
+                if (data.periodType === "daily") {
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  });
+                } else if (data.periodType === "weekly") {
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  });
+                } else {
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    year: "2-digit",
+                  });
+                }
               }}
             />
             <ChartTooltip
@@ -203,18 +215,18 @@ export function ChartAreaInteractive({
               }
             />
             <Area
-              dataKey="activeSupporters"
+              dataKey="newSupporters"
               type="natural"
-              fill="url(#fillActive)"
-              stroke="var(--color-activeSupporters)"
-              stackId="a"
+              fill="url(#fillNew)"
+              stroke="var(--color-newSupporters)"
+              strokeWidth={2}
             />
             <Area
               dataKey="totalSupporters"
               type="natural"
               fill="url(#fillTotal)"
               stroke="var(--color-totalSupporters)"
-              stackId="a"
+              strokeWidth={2}
             />
           </AreaChart>
         </ChartContainer>

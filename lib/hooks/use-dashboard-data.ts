@@ -70,7 +70,7 @@ export function useSummaryMetrics(viewpointGroupId?: string) {
 
 export function useTimeSeriesData(
   viewpointGroupId?: string,
-  period: "weekly" | "monthly" = "monthly"
+  period: "daily" | "weekly" | "monthly" = "monthly"
 ) {
   const key = `time-series-${viewpointGroupId || "default"}-${period}`;
 
