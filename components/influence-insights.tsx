@@ -79,36 +79,44 @@ export function InfluenceInsights({
       </CardHeader>
       <CardContent>
         {topElection && (
-          <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <h3 className="font-semibold text-lg">{topElection.name}</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Your biggest opportunity
-                </p>
+          <Link
+            key={topElection.electionId}
+            href={`/elections/${topElection.electionId}`}
+          >
+            <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <h3 className="font-semibold text-lg">{topElection.name}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Your biggest opportunity
+                  </p>
+                </div>
+                <Badge variant="default" className="text-base">
+                  {topElection.supportersInScope} supporters
+                </Badge>
               </div>
-              <Badge variant="default" className="text-base">
-                {topElection.supportersInScope} supporters
-              </Badge>
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <IconCalendar className="h-4 w-4" />
+                  {topElection.pollDate
+                    ? new Date(topElection.pollDate).toLocaleDateString(
+                        "en-US",
+                        {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        }
+                      )
+                    : "Date TBD"}
+                </span>
+                <span>{topElection.ballotItemsCount} ballot items</span>
+                <span>
+                  {topElection.racesCount} races, {topElection.measuresCount}{" "}
+                  measures
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <IconCalendar className="h-4 w-4" />
-                {topElection.pollDate
-                  ? new Date(topElection.pollDate).toLocaleDateString("en-US", {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })
-                  : "Date TBD"}
-              </span>
-              <span>{topElection.ballotItemsCount} ballot items</span>
-              <span>
-                {topElection.racesCount} races, {topElection.measuresCount}{" "}
-                measures
-              </span>
-            </div>
-          </div>
+          </Link>
         )}
         <div className="space-y-3">
           {topElections.slice(1).map((election) => {
