@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import type { ViewpointGroup } from "@/lib/viewpoint-groups";
+import type { ViewpointGroup } from "@/lib/viewpoint-groups-client";
 import { LEADER_VIEWPOINT_GROUP_ID } from "@/lib/constants";
 import { IconUsers } from "@tabler/icons-react";
 

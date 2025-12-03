@@ -24,6 +24,22 @@ export const createServerClient = () => {
       autoRefreshToken: false,
       persistSession: false,
     },
+    db: {
+      schema: "public",
+    },
+    global: {
+      headers: {
+        "x-client-info": "sway-dashboard",
+      },
+      // Add fetch options for better SSL handling
+      fetch: (url, options = {}) => {
+        return fetch(url, {
+          ...options,
+          // Increase timeout for slow queries
+          signal: options.signal || AbortSignal.timeout(60000), // 60 second timeout
+        });
+      },
+    },
   });
 };
 
@@ -34,7 +50,17 @@ export const createClientClient = () => {
       "NEXT_PUBLIC_SUPABASE_ANON_KEY is required for client-side operations"
     );
   }
-  return createClient(supabaseUrl, supabaseAnonKey);
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+    global: {
+      headers: {
+        "x-client-info": "sway-dashboard",
+      },
+    },
+  });
 };
 
 // Lazy getter for server client (only created when needed)

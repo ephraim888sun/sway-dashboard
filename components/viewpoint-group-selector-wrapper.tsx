@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { ViewpointGroupSelector } from "./viewpoint-group-selector";
-import type { ViewpointGroup } from "@/lib/viewpoint-groups";
+import type { ViewpointGroup } from "@/lib/viewpoint-groups-client";
+import { getAllViewpointGroupsClient } from "@/lib/viewpoint-groups-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useViewpointGroup } from "@/lib/viewpoint-group-context";
 
@@ -15,13 +16,7 @@ export function ViewpointGroupSelectorWrapper() {
   React.useEffect(() => {
     async function fetchGroups() {
       try {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-        const res = await fetch(`${baseUrl}/api/viewpoint-groups`);
-        if (!res.ok) {
-          throw new Error("Failed to fetch viewpoint groups");
-        }
-        const data = await res.json();
+        const data = await getAllViewpointGroupsClient();
         setGroups(data);
       } catch (err) {
         console.error("Error fetching viewpoint groups:", err);
