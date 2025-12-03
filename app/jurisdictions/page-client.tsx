@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { JurisdictionTable } from "@/components/jurisdiction-table";
 import {
   Card,
@@ -27,11 +28,37 @@ function JurisdictionsContent() {
     isLoading,
   } = useJurisdictions(selectedGroupId);
 
+  // Enhanced error extraction with more details
   const error = swrError
     ? swrError instanceof Error
       ? swrError.message
+      : typeof swrError === "object" && swrError !== null
+      ? JSON.stringify(swrError)
       : "Failed to load jurisdictions"
     : null;
+
+  // Development mode logging for debugging
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      if (swrError) {
+        console.error("Jurisdictions page error:", {
+          error: swrError,
+          selectedGroupId,
+          errorMessage: error,
+        });
+      } else if (!isLoading && jurisdictions.length === 0) {
+        console.warn("Jurisdictions page: No data found", {
+          selectedGroupId,
+          jurisdictionsCount: jurisdictions.length,
+        });
+      } else if (!isLoading && jurisdictions.length > 0) {
+        console.log("Jurisdictions page: Data loaded successfully", {
+          selectedGroupId,
+          jurisdictionsCount: jurisdictions.length,
+        });
+      }
+    }
+  }, [swrError, isLoading, jurisdictions.length, selectedGroupId, error]);
 
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -47,10 +74,19 @@ function JurisdictionsContent() {
       </div>
 
       {error && (
-        <Card>
+        <Card className="border-destructive">
           <CardHeader>
-            <CardTitle>Error Loading Data</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardTitle className="text-destructive">
+              Error Loading Data
+            </CardTitle>
+            <CardDescription className="space-y-2">
+              <p>{error}</p>
+              {process.env.NODE_ENV === "development" && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Viewpoint Group ID: {selectedGroupId || "Not set"}
+                </p>
+              )}
+            </CardDescription>
           </CardHeader>
         </Card>
       )}
@@ -59,10 +95,21 @@ function JurisdictionsContent() {
         <Card>
           <CardHeader>
             <CardTitle>No Jurisdictions Found</CardTitle>
-            <CardDescription>
-              No supporter data found for jurisdictions. This may indicate that
-              there are no supporters in the network yet, or there was an issue
-              loading the data.
+            <CardDescription className="space-y-2">
+              <p>
+                No supporter data found for jurisdictions. This may indicate
+                that there are no supporters in the network yet, or there was an
+                issue loading the data.
+              </p>
+              {process.env.NODE_ENV === "development" && (
+                <div className="text-xs text-muted-foreground mt-2 space-y-1">
+                  <p>Viewpoint Group ID: {selectedGroupId || "Not set"}</p>
+                  <p>
+                    Check the browser console for more detailed error
+                    information.
+                  </p>
+                </div>
+              )}
             </CardDescription>
           </CardHeader>
         </Card>

@@ -453,7 +453,20 @@ export async function getJurisdictionsWithInfluenceClient(
 ): Promise<JurisdictionInfluence[]> {
   return retryWithBackoff(async () => {
     const supabase = createClientClient();
-    const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
+
+    // Ensure viewpointGroupId defaults to LEADER_VIEWPOINT_GROUP_ID if undefined
+    const effectiveGroupId = viewpointGroupId || LEADER_VIEWPOINT_GROUP_ID;
+
+    const networkIds = await getViewpointGroupNetworkClient(effectiveGroupId);
+
+    // Validate that networkIds is not empty
+    if (!networkIds || networkIds.length === 0) {
+      console.error(
+        `No network IDs found for viewpoint group: ${effectiveGroupId}. ` +
+          `This may indicate that the viewpoint group has no supporters or there was an issue loading the network.`
+      );
+      return [];
+    }
 
     // Use mv_supporters_by_jurisdiction for supporter counts (it's just a mapping)
     const { data: supportersByJurisdiction, error: supportersError } =
@@ -463,11 +476,22 @@ export async function getJurisdictionsWithInfluenceClient(
         .in("viewpoint_group_id", networkIds);
 
     if (supportersError) {
-      console.error("Error fetching supporters:", supportersError);
+      console.error(
+        `Error fetching supporters from mv_supporters_by_jurisdiction:`,
+        supportersError,
+        `Network IDs:`,
+        networkIds
+      );
       throw supportersError;
     }
 
     if (!supportersByJurisdiction || supportersByJurisdiction.length === 0) {
+      console.warn(
+        `No supporters found in mv_supporters_by_jurisdiction for network IDs:`,
+        networkIds,
+        `Viewpoint Group ID:`,
+        effectiveGroupId
+      );
       return [];
     }
 
@@ -484,14 +508,58 @@ export async function getJurisdictionsWithInfluenceClient(
 
     const jurisdictionIds = Array.from(jurisdictionCounts.keys());
     if (jurisdictionIds.length === 0) {
+      console.warn(
+        `No jurisdiction IDs found after processing supporters. ` +
+          `Found ${supportersByJurisdiction.length} supporter records but no valid jurisdiction IDs.`
+      );
       return [];
     }
 
-    // Get jurisdiction details
-    const { data: jurisdictions } = await supabase
-      .from("jurisdictions")
-      .select("id, name, level")
-      .in("id", jurisdictionIds);
+    // Get jurisdiction details - batched to handle large arrays
+    const allJurisdictions: Array<{
+      id: string;
+      name: string | null;
+      level: string | null;
+    }> = [];
+    let hasJurisdictionError = false;
+    let lastJurisdictionError: unknown = null;
+
+    for (let i = 0; i < jurisdictionIds.length; i += SUPABASE_BATCH_SIZE) {
+      const batch = jurisdictionIds.slice(i, i + SUPABASE_BATCH_SIZE);
+      const { data: jurisdictions, error: jurisdictionsError } = await supabase
+        .from("jurisdictions")
+        .select("id, name, level")
+        .in("id", batch);
+
+      if (jurisdictionsError) {
+        console.error(
+          `Error fetching jurisdiction details for batch ${
+            i / SUPABASE_BATCH_SIZE + 1
+          }:`,
+          jurisdictionsError,
+          `Batch size: ${batch.length}, Jurisdiction IDs in batch:`,
+          batch
+        );
+        hasJurisdictionError = true;
+        lastJurisdictionError = jurisdictionsError;
+        // Continue processing remaining batches even if one fails
+        continue;
+      }
+
+      if (jurisdictions) {
+        allJurisdictions.push(...jurisdictions);
+      }
+    }
+
+    if (hasJurisdictionError && allJurisdictions.length === 0) {
+      // Only throw if we got no results at all
+      throw lastJurisdictionError;
+    }
+
+    if (allJurisdictions.length === 0) {
+      console.warn(`No jurisdiction details found for IDs:`, jurisdictionIds);
+      return [];
+    }
 
     // Get upcoming elections (next 90 days)
     const today = new Date();
@@ -506,19 +574,59 @@ export async function getJurisdictionsWithInfluenceClient(
 
     const electionIds = upcomingElections?.map((e) => e.id) || [];
 
-    // Get ballot items for upcoming elections
-    const { data: ballotItems } = await supabase
-      .from("ballot_items")
-      .select("jurisdiction_id, election_id, races(id), measures(id)")
-      .in("jurisdiction_id", jurisdictionIds)
-      .in("election_id", electionIds);
+    // Get ballot items for upcoming elections - batched to handle large arrays
+    const allBallotItems: Array<{
+      jurisdiction_id: string | null;
+      election_id: string;
+      races: Array<{ id: string }> | null;
+      measures: Array<{ id: string }> | null;
+    }> = [];
+    let hasBallotItemsError = false;
+
+    // Batch by jurisdiction_id (electionIds should typically be smaller)
+    for (let i = 0; i < jurisdictionIds.length; i += SUPABASE_BATCH_SIZE) {
+      const batch = jurisdictionIds.slice(i, i + SUPABASE_BATCH_SIZE);
+      const { data: ballotItems, error: ballotItemsError } = await supabase
+        .from("ballot_items")
+        .select("jurisdiction_id, election_id, races(id), measures(id)")
+        .in("jurisdiction_id", batch)
+        .in("election_id", electionIds);
+
+      if (ballotItemsError) {
+        console.error(
+          `Error fetching ballot items for batch ${
+            i / SUPABASE_BATCH_SIZE + 1
+          }:`,
+          ballotItemsError,
+          `Batch size: ${batch.length}, Jurisdiction IDs in batch:`,
+          batch
+        );
+        hasBallotItemsError = true;
+        // Continue processing remaining batches even if one fails
+        continue;
+      }
+
+      if (ballotItems) {
+        allBallotItems.push(...ballotItems);
+      }
+    }
+
+    // Log warning if we had errors but still got some results
+    if (hasBallotItemsError && allBallotItems.length > 0) {
+      console.warn(
+        `Some ballot item batches failed, but retrieved ${allBallotItems.length} items from successful batches`
+      );
+    }
+
+    // Note: We don't throw on ballot items errors if we got some results,
+    // as partial data is acceptable for counting purposes
 
     // Count elections and ballot items per jurisdiction
     const electionCounts = new Map<string, Set<string>>();
     const ballotItemCounts = new Map<string, number>();
     const raceCounts = new Map<string, number>();
 
-    ballotItems?.forEach((bi) => {
+    allBallotItems.forEach((bi) => {
       const jid = bi.jurisdiction_id;
       if (!jid) return;
 
@@ -537,7 +645,7 @@ export async function getJurisdictionsWithInfluenceClient(
       }
     });
 
-    return (jurisdictions || []).map((j) => ({
+    const result = allJurisdictions.map((j) => ({
       jurisdictionId: j.id,
       name: j.name || "Unknown",
       level: j.level,
@@ -546,6 +654,17 @@ export async function getJurisdictionsWithInfluenceClient(
       upcomingBallotItemsCount: ballotItemCounts.get(j.id) || 0,
       upcomingRacesCount: raceCounts.get(j.id) || 0,
     }));
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `Successfully loaded ${result.length} jurisdictions for viewpoint group:`,
+        effectiveGroupId,
+        `Network IDs:`,
+        networkIds
+      );
+    }
+
+    return result;
   });
 }
 
