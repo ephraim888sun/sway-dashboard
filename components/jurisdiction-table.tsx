@@ -39,9 +39,6 @@ const columns: ColumnDef<JurisdictionInfluence>[] = [
     cell: ({ row }) => (
       <div>
         <div className="font-medium">{row.getValue("name")}</div>
-        <div className="text-sm text-muted-foreground">
-          {row.original.level || "Unknown level"}
-        </div>
       </div>
     ),
   },

@@ -182,16 +182,45 @@ CREATE INDEX IF NOT EXISTS idx_mv_jurisdiction_metrics_jurisdiction_viewpoint
 ON mv_jurisdiction_metrics(jurisdiction_id, viewpoint_group_id);
 
 -- 3. Materialized view for time series supporter growth
--- Pre-computes time series data for supporter growth (weekly/monthly)
+-- Pre-computes time series data for supporter growth (daily/weekly/monthly)
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_time_series_supporters AS
 WITH daily_counts AS (
   SELECT 
     DATE_TRUNC('day', created_at) as date,
     viewpoint_group_id,
-    COUNT(*) as new_supporters
+    COUNT(DISTINCT profile_id) as new_supporters
   FROM mv_supporters_by_jurisdiction
   WHERE created_at IS NOT NULL
   GROUP BY DATE_TRUNC('day', created_at), viewpoint_group_id
+),
+cumulative_daily AS (
+  SELECT 
+    date,
+    viewpoint_group_id,
+    new_supporters,
+    SUM(new_supporters) OVER (
+      PARTITION BY viewpoint_group_id 
+      ORDER BY date 
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) as cumulative_supporters
+  FROM daily_counts
+),
+daily_with_active AS (
+  SELECT 
+    cd.date,
+    cd.viewpoint_group_id,
+    cd.new_supporters,
+    cd.cumulative_supporters,
+    cd.date::date as period_date,
+    COUNT(DISTINCT msbj.profile_id) FILTER (
+      WHERE msbj.created_at >= cd.date - INTERVAL '30 days' 
+      AND msbj.created_at <= cd.date
+    ) as active_supporters
+  FROM cumulative_daily cd
+  LEFT JOIN mv_supporters_by_jurisdiction msbj 
+    ON msbj.viewpoint_group_id = cd.viewpoint_group_id
+    AND msbj.created_at <= cd.date
+  GROUP BY cd.date, cd.viewpoint_group_id, cd.new_supporters, cd.cumulative_supporters
 ),
 monthly_counts AS (
   SELECT 
@@ -271,6 +300,18 @@ weekly_with_active AS (
     AND msbj.created_at <= cw.period_end
   GROUP BY cw.period, cw.viewpoint_group_id, cw.new_supporters, cw.cumulative_supporters, cw.period_end
 )
+SELECT 
+  'daily' as period_type,
+  TO_CHAR(period_date, 'YYYY-MM-DD') as period,
+  viewpoint_group_id,
+  new_supporters,
+  cumulative_supporters,
+  period_date as date,
+  active_supporters
+FROM daily_with_active
+
+UNION ALL
+
 SELECT 
   'monthly' as period_type,
   TO_CHAR(period, 'YYYY-MM') as period,

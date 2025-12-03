@@ -12,14 +12,15 @@ export interface JurisdictionInfluence {
 
 export interface TimeSeriesDataPoint {
   date: string; // ISO date string
-  period: string; // e.g., "2024-04" for monthly, "2024-W15" for weekly
+  period: string; // e.g., "2024-04" for monthly, "2024-W15" for weekly, "2024-10-15" for daily
   newSupporters: number;
   cumulativeSupporters: number;
+  activeSupporters?: number; // 30-day rolling window of active supporters
 }
 
 export interface TimeSeriesData {
   data: TimeSeriesDataPoint[];
-  periodType: "weekly" | "monthly";
+  periodType: "daily" | "weekly" | "monthly";
 }
 
 export interface ElectionInfluence {
@@ -80,7 +81,8 @@ export interface MeasureDetail {
 }
 
 export interface SummaryMetrics {
-  totalSupporters: number;
+  totalSupporters: number; // All supporters regardless of verification status
+  verifiedSupporters: number; // Only supporters with voter verification and jurisdiction data
   topState: {
     state: string;
     supporterCount: number;

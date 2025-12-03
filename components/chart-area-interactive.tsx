@@ -25,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { TimeSeriesData } from "@/types/dashboard";
 
 export const description = "Supporter growth over time";
@@ -37,12 +36,12 @@ interface ChartAreaInteractiveProps {
 
 const chartConfig = {
   totalSupporters: {
-    label: "Total Supporters",
+    label: "Verified Supporters",
     color: "hsl(var(--primary))",
   },
-  activeSupporters: {
-    label: "Active Supporters",
-    color: "hsl(var(--primary))",
+  newSupporters: {
+    label: "New Verified Supporters",
+    color: "hsl(var(--chart-2))",
   },
 } satisfies ChartConfig;
 
@@ -63,7 +62,7 @@ export function ChartAreaInteractive({
     return (
       <Card className="@container/card">
         <CardHeader>
-          <CardTitle>Supporter Growth</CardTitle>
+          <CardTitle>Verified Supporter Growth</CardTitle>
           <CardDescription>Loading...</CardDescription>
         </CardHeader>
         <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
@@ -79,7 +78,7 @@ export function ChartAreaInteractive({
   const chartData = data.data.map((point) => ({
     date: point.date,
     totalSupporters: point.cumulativeSupporters,
-    activeSupporters: point.newSupporters,
+    newSupporters: point.newSupporters,
   }));
 
   const filteredData = chartData.filter((item) => {
@@ -99,25 +98,16 @@ export function ChartAreaInteractive({
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Supporter Growth</CardTitle>
+        <CardTitle>Verified Supporter Growth</CardTitle>
         <CardDescription>
           <span className="hidden @[540px]/card:block">
-            Total and active supporters over time
+            Verified supporters with jurisdiction data over time
           </span>
-          <span className="@[540px]/card:hidden">Supporter growth</span>
+          <span className="@[540px]/card:hidden">
+            Verified supporter growth
+          </span>
         </CardDescription>
         <CardAction>
-          <ToggleGroup
-            type="single"
-            value={timeRange}
-            onValueChange={setTimeRange}
-            variant="outline"
-            className="hidden *:data-[slot=toggle-group-item]:!px-4 @[767px]/card:flex"
-          >
-            <ToggleGroupItem value="90d">Last 3 months</ToggleGroupItem>
-            <ToggleGroupItem value="30d">Last 30 days</ToggleGroupItem>
-            <ToggleGroupItem value="7d">Last 7 days</ToggleGroupItem>
-          </ToggleGroup>
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger
               className="flex w-40 **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate @[767px]/card:hidden"
@@ -151,7 +141,7 @@ export function ChartAreaInteractive({
                 <stop
                   offset="5%"
                   stopColor="var(--color-totalSupporters)"
-                  stopOpacity={1.0}
+                  stopOpacity={0.8}
                 />
                 <stop
                   offset="95%"
@@ -159,15 +149,15 @@ export function ChartAreaInteractive({
                   stopOpacity={0.1}
                 />
               </linearGradient>
-              <linearGradient id="fillActive" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="fillNew" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="5%"
-                  stopColor="var(--color-activeSupporters)"
-                  stopOpacity={0.8}
+                  stopColor="var(--color-newSupporters)"
+                  stopOpacity={0.6}
                 />
                 <stop
                   offset="95%"
-                  stopColor="var(--color-activeSupporters)"
+                  stopColor="var(--color-newSupporters)"
                   stopOpacity={0.1}
                 />
               </linearGradient>
@@ -178,13 +168,25 @@ export function ChartAreaInteractive({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              minTickGap={32}
+              minTickGap={data.periodType === "daily" ? 24 : 32}
               tickFormatter={(value) => {
                 const date = new Date(value);
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                });
+                if (data.periodType === "daily") {
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  });
+                } else if (data.periodType === "weekly") {
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  });
+                } else {
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    year: "2-digit",
+                  });
+                }
               }}
             />
             <ChartTooltip
@@ -203,18 +205,18 @@ export function ChartAreaInteractive({
               }
             />
             <Area
-              dataKey="activeSupporters"
+              dataKey="newSupporters"
               type="natural"
-              fill="url(#fillActive)"
-              stroke="var(--color-activeSupporters)"
-              stackId="a"
+              fill="url(#fillNew)"
+              stroke="var(--color-newSupporters)"
+              strokeWidth={2}
             />
             <Area
               dataKey="totalSupporters"
               type="natural"
               fill="url(#fillTotal)"
               stroke="var(--color-totalSupporters)"
-              stackId="a"
+              strokeWidth={2}
             />
           </AreaChart>
         </ChartContainer>

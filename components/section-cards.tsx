@@ -15,8 +15,8 @@ interface SectionCardsProps {
 export function SectionCards({ metrics, isLoading }: SectionCardsProps) {
   if (isLoading || !metrics) {
     return (
-      <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-3">
-        {[1, 2, 3].map((i) => (
+      <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @2xl/main:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
           <Card key={i} className="@container/card">
             <CardHeader>
               <CardDescription>Loading...</CardDescription>
@@ -31,7 +31,7 @@ export function SectionCards({ metrics, isLoading }: SectionCardsProps) {
   }
 
   return (
-    <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-3">
+    <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @2xl/main:grid-cols-4">
       <Card className="@container/card">
         <CardHeader>
           <CardDescription>Total Supporters</CardDescription>
@@ -41,7 +41,21 @@ export function SectionCards({ metrics, isLoading }: SectionCardsProps) {
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="text-muted-foreground">
-            Your confirmed, real supporter base
+            All supporters in your network, including those without voter
+            verification
+          </div>
+        </CardFooter>
+      </Card>
+      <Card className="@container/card">
+        <CardHeader>
+          <CardDescription>Verified Supporters</CardDescription>
+          <CardTitle className="text-3xl font-semibold tabular-nums @[250px]/card:text-4xl">
+            {metrics.verifiedSupporters.toLocaleString()}
+          </CardTitle>
+        </CardHeader>
+        <CardFooter className="flex-col items-start gap-1.5 text-sm">
+          <div className="text-muted-foreground">
+            Supporters with completed voter verification and jurisdiction data
           </div>
         </CardFooter>
       </Card>
