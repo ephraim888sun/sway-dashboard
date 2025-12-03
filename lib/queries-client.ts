@@ -536,8 +536,8 @@ export async function getStateDistributionClient(
       if (jurisdictions) {
         jurisdictions.forEach((j) => {
           if (j.id) {
-            // Prefer state field (abbreviation), fallback to name extraction
-            jurisdictionStateMap.set(j.id, j.state || j.name || "");
+            // Use state field (abbreviation) directly from database
+            jurisdictionStateMap.set(j.id, j.state || "");
           }
         });
       }
@@ -598,59 +598,6 @@ export async function getStateDistributionClient(
       DC: "District of Columbia",
     };
 
-    const stateNames = [
-      "California",
-      "Texas",
-      "Florida",
-      "New York",
-      "Pennsylvania",
-      "Illinois",
-      "Ohio",
-      "Georgia",
-      "North Carolina",
-      "Michigan",
-      "New Jersey",
-      "Virginia",
-      "Washington",
-      "Arizona",
-      "Massachusetts",
-      "Tennessee",
-      "Indiana",
-      "Missouri",
-      "Maryland",
-      "Wisconsin",
-      "Colorado",
-      "Minnesota",
-      "South Carolina",
-      "Alabama",
-      "Louisiana",
-      "Kentucky",
-      "Oregon",
-      "Oklahoma",
-      "Connecticut",
-      "Utah",
-      "Iowa",
-      "Nevada",
-      "Arkansas",
-      "Mississippi",
-      "Kansas",
-      "New Mexico",
-      "Nebraska",
-      "West Virginia",
-      "Idaho",
-      "Hawaii",
-      "New Hampshire",
-      "Maine",
-      "Montana",
-      "Rhode Island",
-      "Delaware",
-      "South Dakota",
-      "North Dakota",
-      "Alaska",
-      "Vermont",
-      "Wyoming",
-    ];
-
     // Group by state
     const stateMap = new Map<
       string,
@@ -660,23 +607,21 @@ export async function getStateDistributionClient(
     supportersByJurisdiction.forEach((s) => {
       if (!s.jurisdiction_id || !s.profile_id) return;
 
-      const jurisdictionStateOrName =
+      const jurisdictionState =
         jurisdictionStateMap.get(s.jurisdiction_id) || "";
 
-      // Try to get state name from abbreviation first
-      let state = "Other";
-      const stateAbbr = jurisdictionStateOrName.trim().toUpperCase();
+      // Skip jurisdictions without a state value
+      if (!jurisdictionState.trim()) {
+        return;
+      }
 
-      if (stateAbbreviationToName[stateAbbr]) {
-        state = stateAbbreviationToName[stateAbbr];
-      } else {
-        // Fallback: try to match from jurisdiction name
-        for (const stateName of stateNames) {
-          if (jurisdictionStateOrName.includes(stateName)) {
-            state = stateName;
-            break;
-          }
-        }
+      // Get state name from abbreviation
+      const stateAbbr = jurisdictionState.trim().toUpperCase();
+      const state = stateAbbreviationToName[stateAbbr];
+
+      // Skip if state abbreviation doesn't match a known state
+      if (!state) {
+        return;
       }
 
       if (!stateMap.has(state)) {
