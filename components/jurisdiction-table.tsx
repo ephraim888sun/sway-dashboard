@@ -46,14 +46,6 @@ const columns: ColumnDef<JurisdictionInfluence>[] = [
     ),
   },
   {
-    accessorKey: "engagementScore",
-    header: "Engagement Score",
-    cell: ({ row }) => {
-      const score = row.getValue("engagementScore") as number;
-      return <div className="font-medium">{score.toFixed(1)}</div>;
-    },
-  },
-  {
     accessorKey: "upcomingElectionsCount",
     header: "Upcoming Elections",
     cell: ({ row }) => {
@@ -76,56 +68,17 @@ const columns: ColumnDef<JurisdictionInfluence>[] = [
     header: "Supporters",
     cell: ({ row }) => {
       const count = row.getValue("supporterCount") as number;
-      const active90d = row.original.activeSupporterCount90d || 0;
-      return (
-        <div>
-          <div className="font-medium">{count.toLocaleString()}</div>
-          {active90d > 0 && (
-            <div className="text-xs text-muted-foreground">
-              {active90d} active (90d)
-            </div>
-          )}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "supporterShare",
-    header: "Share of Turnout",
-    cell: ({ row }) => {
-      const share = row.getValue("supporterShare") as number | null;
-      return (
-        <div className="font-medium">
-          {share !== null ? `${share.toFixed(2)}%` : "N/A"}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "growth90d",
-    header: "90-Day Growth",
-    cell: ({ row }) => {
-      const growth = row.getValue("growth90d") as number;
-      const isPositive = growth >= 0;
-      return (
-        <div
-          className={`font-medium ${
-            isPositive ? "text-green-600" : "text-red-600"
-          }`}
-        >
-          {isPositive ? "+" : ""}
-          {growth.toFixed(1)}%
-        </div>
-      );
+      return <div className="font-medium">{count.toLocaleString()}</div>;
     },
   },
 ];
 
 export function JurisdictionTable({ data, isLoading }: JurisdictionTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([
-    { id: "engagementScore", desc: true },
+    { id: "supporterCount", desc: true },
   ]);
 
+  // This is expected behavior and does not affect functionality
   const table = useReactTable({
     data,
     columns,
@@ -150,17 +103,14 @@ export function JurisdictionTable({ data, isLoading }: JurisdictionTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Jurisdiction</TableHead>
-              <TableHead>Engagement Score</TableHead>
               <TableHead>Upcoming Elections</TableHead>
               <TableHead>Supporters</TableHead>
-              <TableHead>Share of Turnout</TableHead>
-              <TableHead>90-Day Growth</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {[1, 2, 3, 4, 5].map((i) => (
               <TableRow key={i}>
-                <TableCell colSpan={5} className="h-12">
+                <TableCell colSpan={3} className="h-12">
                   <div className="h-4 bg-muted animate-pulse rounded" />
                 </TableCell>
               </TableRow>

@@ -79,7 +79,7 @@ export function ChartAreaInteractive({
   const chartData = data.data.map((point) => ({
     date: point.date,
     totalSupporters: point.cumulativeSupporters,
-    activeSupporters: point.activeSupporters,
+    activeSupporters: point.newSupporters,
   }));
 
   const filteredData = chartData.filter((item) => {
