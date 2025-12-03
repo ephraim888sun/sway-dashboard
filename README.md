@@ -1,7 +1,5 @@
 # Dashboard Documentation
 
-https://github.com/ephraim888sun/sway-dashboard
-
 ## Overview
 
 The Sway Dashboard provides a comprehensive view of supporter influence, electoral opportunities, and geographic distribution across jurisdictions and elections. It enables leaders to identify actionable opportunities where their verified supporters can make an impact in upcoming elections.
