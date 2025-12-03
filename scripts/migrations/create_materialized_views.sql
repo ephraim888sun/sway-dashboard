@@ -188,7 +188,7 @@ WITH daily_counts AS (
   SELECT 
     DATE_TRUNC('day', created_at) as date,
     viewpoint_group_id,
-    COUNT(*) as new_supporters
+    COUNT(DISTINCT profile_id) as new_supporters
   FROM mv_supporters_by_jurisdiction
   WHERE created_at IS NOT NULL
   GROUP BY DATE_TRUNC('day', created_at), viewpoint_group_id

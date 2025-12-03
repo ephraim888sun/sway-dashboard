@@ -81,7 +81,8 @@ export interface MeasureDetail {
 }
 
 export interface SummaryMetrics {
-  totalSupporters: number;
+  totalSupporters: number; // All supporters regardless of verification status
+  verifiedSupporters: number; // Only supporters with voter verification and jurisdiction data
   topState: {
     state: string;
     supporterCount: number;

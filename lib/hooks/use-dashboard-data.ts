@@ -11,6 +11,7 @@ import type {
 } from "@/types/dashboard";
 import {
   getTotalSupporterCountClient,
+  getVerifiedSupporterCountClient,
   getJurisdictionsWithInfluenceClient,
   getSupporterGrowthTimeSeriesClient,
   getUpcomingElectionsClient,
@@ -25,12 +26,17 @@ export function useSummaryMetrics(viewpointGroupId?: string) {
     key,
     async () => {
       // Get all metrics in parallel
-      const [totalSupporters, stateDistribution, upcomingElections] =
-        await Promise.all([
-          getTotalSupporterCountClient(viewpointGroupId),
-          getStateDistributionClient(viewpointGroupId),
-          getUpcomingElectionsClient(90, viewpointGroupId),
-        ]);
+      const [
+        totalSupporters,
+        verifiedSupporters,
+        stateDistribution,
+        upcomingElections,
+      ] = await Promise.all([
+        getTotalSupporterCountClient(viewpointGroupId),
+        getVerifiedSupporterCountClient(viewpointGroupId),
+        getStateDistributionClient(viewpointGroupId),
+        getUpcomingElectionsClient(90, viewpointGroupId),
+      ]);
 
       // Find top state
       const topState =
@@ -54,6 +60,7 @@ export function useSummaryMetrics(viewpointGroupId?: string) {
 
       return {
         totalSupporters,
+        verifiedSupporters,
         topState,
         electionsWithAccess,
         totalBallotItems,
