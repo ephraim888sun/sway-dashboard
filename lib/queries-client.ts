@@ -326,7 +326,7 @@ async function getRaceDetailClient(raceId: string): Promise<RaceDetail | null> {
     if (race.office_term_id) {
       const { data: ot, error: otError } = await supabase
         .from("office_terms")
-        .select("*, offices(*)")
+        .select("*, offices(id, name, level, district)")
         .eq("id", race.office_term_id)
         .single();
 
@@ -338,7 +338,7 @@ async function getRaceDetailClient(raceId: string): Promise<RaceDetail | null> {
             level?: string;
             district?: string;
           } | null) || null;
-      } else if (hasMeaningfulError(otError)) {
+      } else if (!ot && hasMeaningfulError(otError)) {
         console.error(
           `Error fetching office term for raceId ${raceId}:`,
           otError
