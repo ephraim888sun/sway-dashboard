@@ -21,6 +21,26 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // milliseconds
 
 /**
+ * Check if an error object has meaningful content
+ * Supabase may return empty error objects for "not found" cases
+ */
+function hasMeaningfulError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error !== "object") return true;
+
+  const err = error as Record<string, unknown>;
+
+  // Check for common error properties
+  return !!(
+    err.message ||
+    err.code ||
+    err.details ||
+    err.hint ||
+    (Object.keys(err).length > 0 && JSON.stringify(err) !== "{}")
+  );
+}
+
+/**
  * Retry helper with exponential backoff
  */
 async function retryWithBackoff<T>(
@@ -254,8 +274,14 @@ async function getRaceDetailClient(raceId: string): Promise<RaceDetail | null> {
       .eq("id", raceId)
       .single();
 
-    if (raceError || !race) {
-      console.error("Error fetching race detail:", raceError);
+    if (!race) {
+      // Only log if there's a meaningful error (not just "not found")
+      if (hasMeaningfulError(raceError)) {
+        console.error(
+          `Error fetching race detail for raceId ${raceId}:`,
+          raceError
+        );
+      }
       return null;
     }
 
@@ -267,18 +293,26 @@ async function getRaceDetailClient(raceId: string): Promise<RaceDetail | null> {
       null;
 
     if (race.office_term_id) {
-      const { data: ot } = await supabase
+      const { data: ot, error: otError } = await supabase
         .from("office_terms")
         .select("*, offices(*)")
         .eq("id", race.office_term_id)
         .single();
-      officeTerm = ot;
-      office =
-        (ot?.offices as {
-          name?: string;
-          level?: string;
-          district?: string;
-        } | null) || null;
+
+      if (ot) {
+        officeTerm = ot;
+        office =
+          (ot?.offices as {
+            name?: string;
+            level?: string;
+            district?: string;
+          } | null) || null;
+      } else if (hasMeaningfulError(otError)) {
+        console.error(
+          `Error fetching office term for raceId ${raceId}:`,
+          otError
+        );
+      }
     }
 
     const { data: candidacies } = await supabase
@@ -304,12 +338,17 @@ async function getRaceDetailClient(raceId: string): Promise<RaceDetail | null> {
 
     let party = null;
     if (race.party_id) {
-      const { data: p } = await supabase
+      const { data: p, error: partyError } = await supabase
         .from("parties")
         .select("*")
         .eq("id", race.party_id)
         .single();
-      party = p;
+
+      if (p) {
+        party = p;
+      } else if (hasMeaningfulError(partyError)) {
+        console.error(`Error fetching party for raceId ${raceId}:`, partyError);
+      }
     }
 
     return {
@@ -341,8 +380,14 @@ async function getMeasureDetailClient(
       .eq("id", measureId)
       .single();
 
-    if (measureError || !measure) {
-      console.error("Error fetching measure detail:", measureError);
+    if (!measure) {
+      // Only log if there's a meaningful error (not just "not found")
+      if (hasMeaningfulError(measureError)) {
+        console.error(
+          `Error fetching measure detail for measureId ${measureId}:`,
+          measureError
+        );
+      }
       return null;
     }
 
