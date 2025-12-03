@@ -37,6 +37,7 @@ WITH supporter_stats AS (
     jurisdiction_id,
     viewpoint_group_id,
     COUNT(DISTINCT profile_id) as supporter_count,
+    -- 30-day metrics (kept for backward compatibility)
     COUNT(DISTINCT CASE 
       WHEN created_at >= NOW() - INTERVAL '30 days' 
       THEN profile_id 
@@ -74,7 +75,38 @@ WITH supporter_stats AS (
       END) > 0 
       THEN 100
       ELSE 0
-    END as growth_30d
+    END as growth_30d,
+    -- 90-day metrics (more relevant given data distribution)
+    COUNT(DISTINCT CASE 
+      WHEN created_at >= NOW() - INTERVAL '90 days' 
+      THEN profile_id 
+    END) as active_supporter_count_90d,
+    COUNT(DISTINCT profile_id) - COUNT(DISTINCT CASE 
+      WHEN created_at >= NOW() - INTERVAL '90 days' 
+      THEN profile_id 
+    END) as previous_count_90d,
+    CASE 
+      WHEN COUNT(DISTINCT profile_id) - COUNT(DISTINCT CASE 
+        WHEN created_at >= NOW() - INTERVAL '90 days' 
+        THEN profile_id 
+      END) > 0 
+      THEN COUNT(DISTINCT CASE 
+        WHEN created_at >= NOW() - INTERVAL '90 days' 
+        THEN profile_id 
+      END)::numeric / NULLIF(
+        COUNT(DISTINCT profile_id) - COUNT(DISTINCT CASE 
+          WHEN created_at >= NOW() - INTERVAL '90 days' 
+          THEN profile_id 
+        END), 
+        0
+      ) * 100
+      WHEN COUNT(DISTINCT CASE 
+        WHEN created_at >= NOW() - INTERVAL '90 days' 
+        THEN profile_id 
+      END) > 0 
+      THEN 100
+      ELSE 0
+    END as growth_90d
   FROM mv_supporters_by_jurisdiction
   GROUP BY jurisdiction_id, viewpoint_group_id
 ),
@@ -83,15 +115,35 @@ jurisdiction_turnout AS (
     id as jurisdiction_id,
     name,
     level,
-    CASE level
-      WHEN 'country' THEN 150000000
-      WHEN 'state' THEN 5000000
-      WHEN 'county' THEN 500000
-      WHEN 'city' THEN 50000
-      WHEN 'district' THEN 10000
+    -- Improved turnout estimates: use name patterns when level is NULL
+    CASE 
+      WHEN level = 'country' THEN 150000000
+      WHEN level = 'state' THEN 5000000
+      WHEN level = 'county' THEN 500000
+      WHEN level = 'city' THEN 50000
+      WHEN level = 'district' THEN 10000
+      -- Try to infer from name patterns for NULL levels
+      WHEN level IS NULL AND (
+        name IN ('California', 'Texas', 'Florida', 'New York', 'Pennsylvania', 'Illinois', 'Ohio', 'Georgia', 'North Carolina', 'Michigan', 'New Jersey', 'Virginia', 'Washington', 'Arizona', 'Massachusetts', 'Tennessee', 'Indiana', 'Missouri', 'Maryland', 'Wisconsin', 'Colorado', 'Minnesota', 'South Carolina', 'Alabama', 'Louisiana', 'Kentucky', 'Oregon', 'Oklahoma', 'Connecticut', 'Utah', 'Iowa', 'Nevada', 'Arkansas', 'Mississippi', 'Kansas', 'New Mexico', 'Nebraska', 'West Virginia', 'Idaho', 'Hawaii', 'New Hampshire', 'Maine', 'Montana', 'Rhode Island', 'Delaware', 'South Dakota', 'North Dakota', 'Alaska', 'Vermont', 'Wyoming')
+      ) THEN 5000000
+      WHEN level IS NULL AND name ~ '^[A-Z][a-z]+ (County|Parish)$' THEN 500000
+      WHEN level IS NULL AND name ~ '^[A-Z][a-z]+$' AND LENGTH(name) > 3 THEN 100000
       ELSE 10000
     END as estimated_turnout
   FROM jurisdictions
+),
+upcoming_elections_stats AS (
+  SELECT 
+    bi.jurisdiction_id,
+    COUNT(DISTINCT e.id) as upcoming_elections_count,
+    COUNT(DISTINCT bi.id) as upcoming_ballot_items_count,
+    COUNT(DISTINCT r.id) as upcoming_races_count
+  FROM ballot_items bi
+  INNER JOIN elections e ON e.id = bi.election_id
+  LEFT JOIN races r ON r.ballot_item_id = bi.id
+  WHERE e.poll_date >= CURRENT_DATE
+    AND bi.jurisdiction_id IS NOT NULL
+  GROUP BY bi.jurisdiction_id
 )
 SELECT 
   ss.jurisdiction_id,
@@ -102,14 +154,28 @@ SELECT
   ss.active_supporter_count,
   ss.active_rate,
   ss.growth_30d,
+  ss.active_supporter_count_90d,
+  ss.growth_90d,
   jt.estimated_turnout,
   CASE 
     WHEN jt.estimated_turnout > 0 
     THEN (ss.supporter_count::numeric / jt.estimated_turnout) * 100
     ELSE NULL
-  END as supporter_share
+  END as supporter_share,
+  COALESCE(ues.upcoming_elections_count, 0) as upcoming_elections_count,
+  COALESCE(ues.upcoming_ballot_items_count, 0) as upcoming_ballot_items_count,
+  COALESCE(ues.upcoming_races_count, 0) as upcoming_races_count,
+  -- Engagement score: combines supporter presence with actionable opportunities
+  -- Formula: (supporter_count * 0.3) + (upcoming_elections_count * 20) + (upcoming_races_count * 5)
+  -- This prioritizes jurisdictions with both supporters and upcoming elections
+  (
+    (ss.supporter_count * 0.3) + 
+    (COALESCE(ues.upcoming_elections_count, 0) * 20) + 
+    (COALESCE(ues.upcoming_races_count, 0) * 5)
+  )::numeric as engagement_score
 FROM supporter_stats ss
-INNER JOIN jurisdiction_turnout jt ON jt.jurisdiction_id = ss.jurisdiction_id;
+INNER JOIN jurisdiction_turnout jt ON jt.jurisdiction_id = ss.jurisdiction_id
+LEFT JOIN upcoming_elections_stats ues ON ues.jurisdiction_id = ss.jurisdiction_id;
 
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_mv_jurisdiction_metrics_jurisdiction_viewpoint 

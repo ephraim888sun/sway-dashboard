@@ -11,6 +11,7 @@ import type {
   RaceDetail,
   MeasureDetail,
   Candidate,
+  StateDistribution,
 } from "@/types/dashboard";
 
 // Supabase batch size limit for .in() queries
@@ -159,43 +160,12 @@ export async function getSupporterGrowthTimeSeriesClient(
       period: row.period,
       newSupporters: row.new_supporters,
       cumulativeSupporters: row.cumulative_supporters,
-      activeSupporters: row.active_supporters || 0,
     }));
   });
 }
 
 /**
- * Get active supporter count (last 30 days) (client-side version)
- */
-export async function getActiveSupporterCountClient(
-  viewpointGroupId?: string
-): Promise<number> {
-  return retryWithBackoff(async () => {
-    const supabase = createClientClient();
-    const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
-
-    const { data, error } = await supabase
-      .from("mv_jurisdiction_metrics")
-      .select("active_supporter_count")
-      .in("viewpoint_group_id", networkIds);
-
-    if (error) {
-      console.error(
-        "Error fetching active supporters from materialized view:",
-        error
-      );
-      throw error;
-    }
-
-    return (
-      data?.reduce((sum, row) => sum + (row.active_supporter_count || 0), 0) ||
-      0
-    );
-  });
-}
-
-/**
- * Get total supporter count (client-side version)
+ * Get total supporter count (client-side version) - direct query
  */
 export async function getTotalSupporterCountClient(
   viewpointGroupId?: string
@@ -204,25 +174,23 @@ export async function getTotalSupporterCountClient(
     const supabase = createClientClient();
     const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
 
-    const { data, error } = await supabase
-      .from("mv_jurisdiction_metrics")
-      .select("supporter_count")
-      .in("viewpoint_group_id", networkIds);
+    const { count, error } = await supabase
+      .from("profile_viewpoint_group_rels")
+      .select("*", { count: "exact", head: true })
+      .in("viewpoint_group_id", networkIds)
+      .eq("type", "supporter");
 
     if (error) {
-      console.error(
-        "Error fetching total supporters from materialized view:",
-        error
-      );
+      console.error("Error fetching total supporters:", error);
       throw error;
     }
 
-    return data?.reduce((sum, row) => sum + (row.supporter_count || 0), 0) || 0;
+    return count || 0;
   });
 }
 
 /**
- * Get jurisdictions with influence data (client-side version)
+ * Get jurisdictions with supporters (client-side version) - direct query
  */
 export async function getJurisdictionsWithInfluenceClient(
   viewpointGroupId?: string
@@ -231,33 +199,96 @@ export async function getJurisdictionsWithInfluenceClient(
     const supabase = createClientClient();
     const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
 
-    const { data, error } = await supabase
-      .from("mv_jurisdiction_metrics")
-      .select("*")
-      .in("viewpoint_group_id", networkIds);
+    // Use mv_supporters_by_jurisdiction for supporter counts (it's just a mapping)
+    const { data: supportersByJurisdiction, error: supportersError } =
+      await supabase
+        .from("mv_supporters_by_jurisdiction")
+        .select("jurisdiction_id, profile_id")
+        .in("viewpoint_group_id", networkIds);
 
-    if (error) {
-      console.error(
-        "Error fetching jurisdictions from materialized view:",
-        error
-      );
-      throw error;
+    if (supportersError) {
+      console.error("Error fetching supporters:", supportersError);
+      throw supportersError;
     }
 
-    if (!data || data.length === 0) {
+    if (!supportersByJurisdiction || supportersByJurisdiction.length === 0) {
       return [];
     }
 
-    return data.map((row) => ({
-      jurisdictionId: row.jurisdiction_id,
-      name: row.name || "Unknown",
-      level: row.level,
-      supporterCount: row.supporter_count || 0,
-      estimatedTurnout: row.estimated_turnout || 0,
-      supporterShare: row.supporter_share,
-      activeSupporterCount: row.active_supporter_count || 0,
-      activeRate: row.active_rate || 0,
-      growth30d: row.growth_30d || 0,
+    // Count supporters per jurisdiction
+    const jurisdictionCounts = new Map<string, Set<string>>();
+    supportersByJurisdiction.forEach((s) => {
+      if (s.jurisdiction_id && s.profile_id) {
+        if (!jurisdictionCounts.has(s.jurisdiction_id)) {
+          jurisdictionCounts.set(s.jurisdiction_id, new Set());
+        }
+        jurisdictionCounts.get(s.jurisdiction_id)!.add(s.profile_id);
+      }
+    });
+
+    const jurisdictionIds = Array.from(jurisdictionCounts.keys());
+    if (jurisdictionIds.length === 0) {
+      return [];
+    }
+
+    // Get jurisdiction details
+    const { data: jurisdictions } = await supabase
+      .from("jurisdictions")
+      .select("id, name, level")
+      .in("id", jurisdictionIds);
+
+    // Get upcoming elections (next 90 days)
+    const today = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 90);
+
+    const { data: upcomingElections } = await supabase
+      .from("elections")
+      .select("id")
+      .gte("poll_date", today.toISOString().split("T")[0])
+      .lte("poll_date", futureDate.toISOString().split("T")[0]);
+
+    const electionIds = upcomingElections?.map((e) => e.id) || [];
+
+    // Get ballot items for upcoming elections
+    const { data: ballotItems } = await supabase
+      .from("ballot_items")
+      .select("jurisdiction_id, election_id, races(id), measures(id)")
+      .in("jurisdiction_id", jurisdictionIds)
+      .in("election_id", electionIds);
+
+    // Count elections and ballot items per jurisdiction
+    const electionCounts = new Map<string, Set<string>>();
+    const ballotItemCounts = new Map<string, number>();
+    const raceCounts = new Map<string, number>();
+
+    ballotItems?.forEach((bi) => {
+      const jid = bi.jurisdiction_id;
+      if (!jid) return;
+
+      if (!electionCounts.has(jid)) {
+        electionCounts.set(jid, new Set());
+        ballotItemCounts.set(jid, 0);
+        raceCounts.set(jid, 0);
+      }
+
+      electionCounts.get(jid)!.add(bi.election_id);
+      ballotItemCounts.set(jid, (ballotItemCounts.get(jid) || 0) + 1);
+
+      const races = bi.races as { id?: string }[] | null;
+      if (races && races.length > 0) {
+        raceCounts.set(jid, (raceCounts.get(jid) || 0) + 1);
+      }
+    });
+
+    return (jurisdictions || []).map((j) => ({
+      jurisdictionId: j.id,
+      name: j.name || "Unknown",
+      level: j.level,
+      supporterCount: jurisdictionCounts.get(j.id)?.size || 0,
+      upcomingElectionsCount: electionCounts.get(j.id)?.size || 0,
+      upcomingBallotItemsCount: ballotItemCounts.get(j.id) || 0,
+      upcomingRacesCount: raceCounts.get(j.id) || 0,
     }));
   });
 }
@@ -404,50 +435,7 @@ async function getMeasureDetailClient(
 }
 
 /**
- * Calculate influence score for a race/measure (client-side version)
- */
-async function calculateInfluenceScoreClient(
-  supporterCount: number,
-  influenceTargetId: string | null,
-  networkIds: string[]
-): Promise<number> {
-  if (!influenceTargetId) {
-    return 0;
-  }
-
-  return retryWithBackoff(async () => {
-    const supabase = createClientClient();
-    const { data: alignments, error } = await supabase
-      .from("influence_target_viewpoint_group_rels")
-      .select("weight")
-      .eq("influence_target_id", influenceTargetId)
-      .in("viewpoint_group_id", networkIds);
-
-    if (error) {
-      console.error("Error checking alignment:", error);
-    }
-
-    const alignmentWeight =
-      alignments && alignments.length > 0
-        ? Math.min(
-            alignments.reduce((sum, a) => sum + (Number(a.weight) || 0), 0) /
-              alignments.length,
-            1
-          )
-        : 0;
-
-    const estimatedTurnout = 10000;
-    const supporterShare =
-      estimatedTurnout > 0 ? supporterCount / estimatedTurnout : 0;
-
-    const influenceScore = supporterShare * 50 + alignmentWeight * 50;
-    return Math.min(Math.max(influenceScore, 0), 100);
-  });
-}
-
-/**
  * Get all supporters for the leader's network by jurisdiction (client-side version)
- * This is a simplified version that uses materialized views when possible
  */
 async function getSupportersByJurisdictionClient(
   viewpointGroupId?: string
@@ -455,7 +443,6 @@ async function getSupportersByJurisdictionClient(
   const supabase = createClientClient();
   const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
 
-  // Use materialized view if available, otherwise fallback to direct queries
   const { data: supporters, error: supportersError } = await supabase
     .from("mv_supporters_by_jurisdiction")
     .select("jurisdiction_id, profile_id, created_at")
@@ -495,6 +482,225 @@ async function getSupportersByJurisdictionClient(
 }
 
 /**
+ * Get state distribution of supporters (client-side version)
+ */
+export async function getStateDistributionClient(
+  viewpointGroupId?: string
+): Promise<StateDistribution[]> {
+  return retryWithBackoff(async () => {
+    const supabase = createClientClient();
+    const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
+
+    // Get supporters by jurisdiction (materialized view doesn't support nested selects)
+    const { data: supportersByJurisdiction, error: supportersError } =
+      await supabase
+        .from("mv_supporters_by_jurisdiction")
+        .select("jurisdiction_id, profile_id")
+        .in("viewpoint_group_id", networkIds);
+
+    if (supportersError) {
+      console.error(
+        "Error fetching supporters by jurisdiction:",
+        supportersError
+      );
+      throw supportersError;
+    }
+
+    if (!supportersByJurisdiction || supportersByJurisdiction.length === 0) {
+      return [];
+    }
+
+    // Get unique jurisdiction IDs
+    const jurisdictionIds = [
+      ...new Set(
+        supportersByJurisdiction
+          .map((s) => s.jurisdiction_id)
+          .filter(Boolean) as string[]
+      ),
+    ];
+
+    if (jurisdictionIds.length === 0) {
+      return [];
+    }
+
+    // Fetch jurisdiction state field separately (materialized views don't support joins in Supabase client)
+    // Use state field (abbreviation) which is more reliable than extracting from name
+    const jurisdictionStateMap = new Map<string, string>();
+    for (let i = 0; i < jurisdictionIds.length; i += SUPABASE_BATCH_SIZE) {
+      const batch = jurisdictionIds.slice(i, i + SUPABASE_BATCH_SIZE);
+      const { data: jurisdictions } = await supabase
+        .from("jurisdictions")
+        .select("id, state, name")
+        .in("id", batch);
+
+      if (jurisdictions) {
+        jurisdictions.forEach((j) => {
+          if (j.id) {
+            // Prefer state field (abbreviation), fallback to name extraction
+            jurisdictionStateMap.set(j.id, j.state || j.name || "");
+          }
+        });
+      }
+    }
+
+    // Map state abbreviations to full names
+    const stateAbbreviationToName: Record<string, string> = {
+      AL: "Alabama",
+      AK: "Alaska",
+      AZ: "Arizona",
+      AR: "Arkansas",
+      CA: "California",
+      CO: "Colorado",
+      CT: "Connecticut",
+      DE: "Delaware",
+      FL: "Florida",
+      GA: "Georgia",
+      HI: "Hawaii",
+      ID: "Idaho",
+      IL: "Illinois",
+      IN: "Indiana",
+      IA: "Iowa",
+      KS: "Kansas",
+      KY: "Kentucky",
+      LA: "Louisiana",
+      ME: "Maine",
+      MD: "Maryland",
+      MA: "Massachusetts",
+      MI: "Michigan",
+      MN: "Minnesota",
+      MS: "Mississippi",
+      MO: "Missouri",
+      MT: "Montana",
+      NE: "Nebraska",
+      NV: "Nevada",
+      NH: "New Hampshire",
+      NJ: "New Jersey",
+      NM: "New Mexico",
+      NY: "New York",
+      NC: "North Carolina",
+      ND: "North Dakota",
+      OH: "Ohio",
+      OK: "Oklahoma",
+      OR: "Oregon",
+      PA: "Pennsylvania",
+      RI: "Rhode Island",
+      SC: "South Carolina",
+      SD: "South Dakota",
+      TN: "Tennessee",
+      TX: "Texas",
+      UT: "Utah",
+      VT: "Vermont",
+      VA: "Virginia",
+      WA: "Washington",
+      WV: "West Virginia",
+      WI: "Wisconsin",
+      WY: "Wyoming",
+      DC: "District of Columbia",
+    };
+
+    const stateNames = [
+      "California",
+      "Texas",
+      "Florida",
+      "New York",
+      "Pennsylvania",
+      "Illinois",
+      "Ohio",
+      "Georgia",
+      "North Carolina",
+      "Michigan",
+      "New Jersey",
+      "Virginia",
+      "Washington",
+      "Arizona",
+      "Massachusetts",
+      "Tennessee",
+      "Indiana",
+      "Missouri",
+      "Maryland",
+      "Wisconsin",
+      "Colorado",
+      "Minnesota",
+      "South Carolina",
+      "Alabama",
+      "Louisiana",
+      "Kentucky",
+      "Oregon",
+      "Oklahoma",
+      "Connecticut",
+      "Utah",
+      "Iowa",
+      "Nevada",
+      "Arkansas",
+      "Mississippi",
+      "Kansas",
+      "New Mexico",
+      "Nebraska",
+      "West Virginia",
+      "Idaho",
+      "Hawaii",
+      "New Hampshire",
+      "Maine",
+      "Montana",
+      "Rhode Island",
+      "Delaware",
+      "South Dakota",
+      "North Dakota",
+      "Alaska",
+      "Vermont",
+      "Wyoming",
+    ];
+
+    // Group by state
+    const stateMap = new Map<
+      string,
+      { supporters: Set<string>; jurisdictions: Set<string> }
+    >();
+
+    supportersByJurisdiction.forEach((s) => {
+      if (!s.jurisdiction_id || !s.profile_id) return;
+
+      const jurisdictionStateOrName =
+        jurisdictionStateMap.get(s.jurisdiction_id) || "";
+
+      // Try to get state name from abbreviation first
+      let state = "Other";
+      const stateAbbr = jurisdictionStateOrName.trim().toUpperCase();
+
+      if (stateAbbreviationToName[stateAbbr]) {
+        state = stateAbbreviationToName[stateAbbr];
+      } else {
+        // Fallback: try to match from jurisdiction name
+        for (const stateName of stateNames) {
+          if (jurisdictionStateOrName.includes(stateName)) {
+            state = stateName;
+            break;
+          }
+        }
+      }
+
+      if (!stateMap.has(state)) {
+        stateMap.set(state, {
+          supporters: new Set(),
+          jurisdictions: new Set(),
+        });
+      }
+
+      stateMap.get(state)!.supporters.add(s.profile_id);
+      stateMap.get(state)!.jurisdictions.add(s.jurisdiction_id);
+    });
+
+    return Array.from(stateMap.entries())
+      .map(([state, data]) => ({
+        state,
+        supporterCount: data.supporters.size,
+        jurisdictionCount: data.jurisdictions.size,
+      }))
+      .sort((a, b) => b.supporterCount - a.supporterCount);
+  });
+}
+
+/**
  * Get upcoming elections with supporter counts (client-side version)
  */
 export async function getUpcomingElectionsClient(
@@ -509,23 +715,13 @@ export async function getUpcomingElectionsClient(
 
     const networkIds = await getViewpointGroupNetworkClient(viewpointGroupId);
 
-    // Fetch elections and election influence summary in parallel
-    const [electionsResult, influenceSummaryResult] = await Promise.all([
-      supabase
-        .from("elections")
-        .select("*")
-        .gte("poll_date", today.toISOString().split("T")[0])
-        .lte("poll_date", futureDate.toISOString().split("T")[0])
-        .order("poll_date", { ascending: true }),
-      supabase
-        .from("mv_election_influence_summary")
-        .select("*")
-        .in("viewpoint_group_id", networkIds),
-    ]);
-
-    const { data: elections, error: electionsError } = electionsResult;
-    const { data: influenceSummary, error: influenceSummaryError } =
-      influenceSummaryResult;
+    // Fetch elections
+    const { data: elections, error: electionsError } = await supabase
+      .from("elections")
+      .select("*")
+      .gte("poll_date", today.toISOString().split("T")[0])
+      .lte("poll_date", futureDate.toISOString().split("T")[0])
+      .order("poll_date", { ascending: true });
 
     if (electionsError) {
       console.error("Error fetching elections:", electionsError);
@@ -534,20 +730,6 @@ export async function getUpcomingElectionsClient(
 
     if (!elections || elections.length === 0) {
       return [];
-    }
-
-    type InfluenceSummaryItem = {
-      election_id: string;
-      viewpoint_group_id: string;
-      supporters_in_scope: number;
-      estimated_turnout: number;
-      supporter_share_in_scope: number | null;
-    };
-    const influenceMap = new Map<string, InfluenceSummaryItem>();
-    if (!influenceSummaryError && influenceSummary) {
-      influenceSummary.forEach((item: InfluenceSummaryItem) => {
-        influenceMap.set(item.election_id, item);
-      });
     }
 
     const supportersByJurisdiction = await getSupportersByJurisdictionClient(
@@ -565,39 +747,25 @@ export async function getUpcomingElectionsClient(
         return null;
       }
 
-      const influenceData = influenceMap.get(election.id);
-      let supportersInScope = influenceData?.supporters_in_scope || 0;
-      let supporterShareInScope =
-        influenceData?.supporter_share_in_scope || null;
+      // Count supporters with ballot access
+      const jurisdictionIds = new Set<string>();
+      ballotItems.forEach((bi) => {
+        if (bi.jurisdiction_id) {
+          jurisdictionIds.add(bi.jurisdiction_id);
+        }
+      });
 
-      if (!influenceData) {
-        const jurisdictionIds = new Set<string>();
-        ballotItems.forEach((bi) => {
-          if (bi.jurisdiction_id) {
-            jurisdictionIds.add(bi.jurisdiction_id);
-          }
-        });
-
-        supportersInScope = 0;
-        jurisdictionIds.forEach((jid) => {
-          const supporters = supportersByJurisdiction.get(jid);
-          if (supporters) {
-            supportersInScope += supporters.profileIds.size;
-          }
-        });
-
-        const estimatedTurnout = jurisdictionIds.size * 10000;
-        supporterShareInScope =
-          estimatedTurnout > 0
-            ? (supportersInScope / estimatedTurnout) * 100
-            : null;
-      }
+      let supportersInScope = 0;
+      jurisdictionIds.forEach((jid) => {
+        const supporters = supportersByJurisdiction.get(jid);
+        if (supporters) {
+          supportersInScope += supporters.profileIds.size;
+        }
+      });
 
       const ballotItemPromises = ballotItems.map(async (bi) => {
         const jurisdiction = bi.jurisdictions as { name?: string } | null;
         const jurisdictionId = bi.jurisdiction_id;
-        const supporterCount =
-          supportersByJurisdiction.get(jurisdictionId)?.profileIds.size || 0;
 
         const [racesResult, measuresResult] = await Promise.all([
           supabase
@@ -617,14 +785,7 @@ export async function getUpcomingElectionsClient(
 
         if (races && races.length > 0) {
           const race = races[0];
-          const [raceDetail, influenceScore] = await Promise.all([
-            getRaceDetailClient(race.id),
-            calculateInfluenceScoreClient(
-              supporterCount,
-              race.influence_target_id || null,
-              networkIds
-            ),
-          ]);
+          const raceDetail = await getRaceDetailClient(race.id);
           return {
             ballotItemId: bi.id,
             title: bi.title,
@@ -634,18 +795,10 @@ export async function getUpcomingElectionsClient(
               (jurisdiction as { name?: string } | null)?.name || null,
             type: "race" as const,
             race: raceDetail || undefined,
-            influenceScore,
           };
         } else if (measures && measures.length > 0) {
           const measure = measures[0];
-          const [measureDetail, influenceScore] = await Promise.all([
-            getMeasureDetailClient(measure.id),
-            calculateInfluenceScoreClient(
-              supporterCount,
-              measure.influence_target_id || null,
-              networkIds
-            ),
-          ]);
+          const measureDetail = await getMeasureDetailClient(measure.id);
           return {
             ballotItemId: bi.id,
             title: bi.title || measure.title,
@@ -655,7 +808,6 @@ export async function getUpcomingElectionsClient(
               (jurisdiction as { name?: string } | null)?.name || null,
             type: "measure" as const,
             measure: measureDetail || undefined,
-            influenceScore,
           };
         }
 
@@ -666,14 +818,17 @@ export async function getUpcomingElectionsClient(
           jurisdictionId: jurisdictionId || "",
           jurisdictionName: jurisdiction?.name || null,
           type: "race" as const,
-          influenceScore: 0,
         };
       });
 
       const ballotItemsWithDetails = await Promise.all(ballotItemPromises);
 
-      const influenceTargetCount = ballotItemsWithDetails.filter(
-        (bi) => bi.influenceScore > 50
+      // Count races and measures
+      const racesCount = ballotItemsWithDetails.filter(
+        (bi) => bi.type === "race"
+      ).length;
+      const measuresCount = ballotItemsWithDetails.filter(
+        (bi) => bi.type === "measure"
       ).length;
 
       return {
@@ -682,8 +837,9 @@ export async function getUpcomingElectionsClient(
         pollDate: election.poll_date,
         description: election.description,
         supportersInScope,
-        supporterShareInScope,
-        influenceTargetCount,
+        ballotItemsCount: ballotItemsWithDetails.length,
+        racesCount,
+        measuresCount,
         ballotItems: ballotItemsWithDetails,
       };
     });
@@ -752,7 +908,6 @@ export async function getElectionDetailClient(
         jurisdictionId: jid,
         jurisdictionName: jurisdiction?.name || "Unknown",
         supporterCount,
-        supporterShare: null, // Would need turnout data
       };
     });
 
@@ -779,11 +934,6 @@ export async function getElectionDetailClient(
         if (races && races.length > 0) {
           const race = races[0];
           const raceDetail = await getRaceDetailClient(race.id);
-          const influenceScore = await calculateInfluenceScoreClient(
-            supporterCount,
-            race.influence_target_id || null,
-            networkIds
-          );
           return {
             ballotItemId: bi.id,
             title: bi.title,
@@ -792,16 +942,10 @@ export async function getElectionDetailClient(
             jurisdictionName: jurisdiction?.name || null,
             type: "race" as const,
             race: raceDetail || undefined,
-            influenceScore,
           };
         } else if (measures && measures.length > 0) {
           const measure = measures[0];
           const measureDetail = await getMeasureDetailClient(measure.id);
-          const influenceScore = await calculateInfluenceScoreClient(
-            supporterCount,
-            measure.influence_target_id || null,
-            networkIds
-          );
           return {
             ballotItemId: bi.id,
             title: bi.title || measure.title,
@@ -810,7 +954,6 @@ export async function getElectionDetailClient(
             jurisdictionName: jurisdiction?.name || null,
             type: "measure" as const,
             measure: measureDetail || undefined,
-            influenceScore,
           };
         }
 
@@ -821,22 +964,29 @@ export async function getElectionDetailClient(
           jurisdictionId: jurisdictionId || "",
           jurisdictionName: jurisdiction?.name || null,
           type: "race" as const,
-          influenceScore: 0,
         };
       })
     );
 
-    // Get top 3 races by influence score
-    const topRaces = ballotItemsWithDetails
+    // Get top 3 races by supporter count
+    const racesWithSupporters = ballotItemsWithDetails
       .filter((bi) => bi.type === "race")
-      .sort((a, b) => b.influenceScore - a.influenceScore)
-      .slice(0, 3);
+      .map((bi) => {
+        const jid = bi.jurisdictionId;
+        const supporterCount =
+          supportersByJurisdiction.get(jid)?.profileIds.size || 0;
+        return { ballotItem: bi, supporterCount };
+      })
+      .sort((a, b) => b.supporterCount - a.supporterCount)
+      .slice(0, 3)
+      .map((item) => item.ballotItem);
 
-    const estimatedTurnout = jurisdictionIds.size * 10000;
-    const supporterShareInScope =
-      estimatedTurnout > 0
-        ? (supportersInScope / estimatedTurnout) * 100
-        : null;
+    const racesCount = ballotItemsWithDetails.filter(
+      (bi) => bi.type === "race"
+    ).length;
+    const measuresCount = ballotItemsWithDetails.filter(
+      (bi) => bi.type === "measure"
+    ).length;
 
     return {
       electionId: election.id,
@@ -845,11 +995,12 @@ export async function getElectionDetailClient(
       description: election.description,
       summary: {
         supportersInScope,
-        supporterShareInScope,
         totalBallotItems: ballotItemsWithDetails.length,
+        racesCount,
+        measuresCount,
       },
       ballotItems: ballotItemsWithDetails,
-      topRaces,
+      topRaces: racesWithSupporters,
       jurisdictionBreakdown,
     };
   });

@@ -7,14 +7,15 @@ import type {
   JurisdictionInfluence,
   ElectionInfluence,
   ElectionDetail,
+  StateDistribution,
 } from "@/types/dashboard";
 import {
   getTotalSupporterCountClient,
-  getActiveSupporterCountClient,
   getJurisdictionsWithInfluenceClient,
   getSupporterGrowthTimeSeriesClient,
   getUpcomingElectionsClient,
   getElectionDetailClient,
+  getStateDistributionClient,
 } from "@/lib/queries-client";
 
 export function useSummaryMetrics(viewpointGroupId?: string) {
@@ -24,48 +25,38 @@ export function useSummaryMetrics(viewpointGroupId?: string) {
     key,
     async () => {
       // Get all metrics in parallel
-      const [
-        totalSupporters,
-        activeSupporters,
-        jurisdictions,
-        upcomingElections,
-      ] = await Promise.all([
-        getTotalSupporterCountClient(viewpointGroupId),
-        getActiveSupporterCountClient(viewpointGroupId),
-        getJurisdictionsWithInfluenceClient(viewpointGroupId),
-        getUpcomingElectionsClient(90, viewpointGroupId),
-      ]);
+      const [totalSupporters, stateDistribution, upcomingElections] =
+        await Promise.all([
+          getTotalSupporterCountClient(viewpointGroupId),
+          getStateDistributionClient(viewpointGroupId),
+          getUpcomingElectionsClient(90, viewpointGroupId),
+        ]);
 
-      // Calculate active rate
-      const activeRate =
-        totalSupporters > 0 ? (activeSupporters / totalSupporters) * 100 : 0;
+      // Find top state
+      const topState =
+        stateDistribution && stateDistribution.length > 0
+          ? {
+              state: stateDistribution[0].state,
+              supporterCount: stateDistribution[0].supporterCount,
+            }
+          : null;
 
-      // Find top jurisdiction by supporter share
-      const topJurisdiction =
-        jurisdictions
-          .filter((j) => j.supporterShare !== null)
-          .sort(
-            (a, b) => (b.supporterShare || 0) - (a.supporterShare || 0)
-          )[0] || null;
-
-      // Count high-leverage elections (supporter share >= 5%)
-      const highLeverageElectionsCount = upcomingElections.filter(
-        (e) => e.supporterShareInScope !== null && e.supporterShareInScope >= 5
+      // Count elections with supporter access
+      const electionsWithAccess = upcomingElections.filter(
+        (e) => e.supportersInScope > 0
       ).length;
+
+      // Sum total ballot items
+      const totalBallotItems = upcomingElections.reduce(
+        (sum, e) => sum + e.ballotItemsCount,
+        0
+      );
 
       return {
         totalSupporters,
-        activeSupporters,
-        activeRate,
-        topJurisdiction: topJurisdiction
-          ? {
-              jurisdictionId: topJurisdiction.jurisdictionId,
-              name: topJurisdiction.name,
-              supporterCount: topJurisdiction.supporterCount,
-              supporterShare: topJurisdiction.supporterShare,
-            }
-          : null,
-        highLeverageElectionsCount,
+        topState,
+        electionsWithAccess,
+        totalBallotItems,
       };
     },
     {
@@ -106,7 +97,7 @@ export function useTimeSeriesData(
 
 export function useJurisdictions(
   viewpointGroupId?: string,
-  sortBy: string = "supporterShare",
+  sortBy: string = "supporterCount",
   order: string = "desc"
 ) {
   const key = `jurisdictions-${
@@ -130,21 +121,17 @@ export function useJurisdictions(
             aValue = a.supporterCount;
             bValue = b.supporterCount;
             break;
-          case "supporterShare":
-            aValue = a.supporterShare || 0;
-            bValue = b.supporterShare || 0;
+          case "upcomingElectionsCount":
+            aValue = a.upcomingElectionsCount;
+            bValue = b.upcomingElectionsCount;
             break;
-          case "activeRate":
-            aValue = a.activeRate;
-            bValue = b.activeRate;
-            break;
-          case "growth30d":
-            aValue = a.growth30d;
-            bValue = b.growth30d;
+          case "upcomingBallotItemsCount":
+            aValue = a.upcomingBallotItemsCount;
+            bValue = b.upcomingBallotItemsCount;
             break;
           default:
-            aValue = a.supporterShare || 0;
-            bValue = b.supporterShare || 0;
+            aValue = a.supporterCount;
+            bValue = b.supporterCount;
         }
 
         if (order === "asc") {
@@ -192,6 +179,21 @@ export function useElectionDetail(
   return useSWR<ElectionDetail | null>(
     key,
     () => getElectionDetailClient(electionId, viewpointGroupId),
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: undefined,
+    }
+  );
+}
+
+export function useStateDistribution(viewpointGroupId?: string) {
+  const key = `state-distribution-${viewpointGroupId || "default"}`;
+
+  return useSWR<StateDistribution[]>(
+    key,
+    () => getStateDistributionClient(viewpointGroupId),
     {
       revalidateOnFocus: false,
       revalidateOnMount: true,

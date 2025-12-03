@@ -1,15 +1,13 @@
-// Dashboard type definitions
+// Dashboard type definitions - simplified to real metrics only
 
 export interface JurisdictionInfluence {
   jurisdictionId: string;
   name: string;
   level: string | null;
   supporterCount: number;
-  estimatedTurnout: number | null;
-  supporterShare: number | null; // percentage (0-100)
-  activeSupporterCount: number;
-  activeRate: number; // percentage (0-100)
-  growth30d: number; // percentage change
+  upcomingElectionsCount: number;
+  upcomingBallotItemsCount: number;
+  upcomingRacesCount: number;
 }
 
 export interface TimeSeriesDataPoint {
@@ -17,7 +15,6 @@ export interface TimeSeriesDataPoint {
   period: string; // e.g., "2024-04" for monthly, "2024-W15" for weekly
   newSupporters: number;
   cumulativeSupporters: number;
-  activeSupporters: number;
 }
 
 export interface TimeSeriesData {
@@ -31,8 +28,9 @@ export interface ElectionInfluence {
   pollDate: string | null;
   description: string | null;
   supportersInScope: number;
-  supporterShareInScope: number | null; // percentage
-  influenceTargetCount: number; // races/measures aligned with viewpoint groups
+  ballotItemsCount: number;
+  racesCount: number;
+  measuresCount: number;
   ballotItems: BallotItem[];
 }
 
@@ -45,7 +43,6 @@ export interface BallotItem {
   type: "race" | "measure";
   race?: RaceDetail;
   measure?: MeasureDetail;
-  influenceScore: number; // 0-100
 }
 
 export interface RaceDetail {
@@ -84,26 +81,18 @@ export interface MeasureDetail {
 
 export interface SummaryMetrics {
   totalSupporters: number;
-  activeSupporters: number;
-  activeRate: number; // percentage (0-100)
-  topJurisdiction: {
-    jurisdictionId: string;
-    name: string;
+  topState: {
+    state: string;
     supporterCount: number;
-    supporterShare: number | null;
   } | null;
-  highLeverageElectionsCount: number;
+  electionsWithAccess: number;
+  totalBallotItems: number;
 }
 
-export interface InfluenceTarget {
-  id: string;
-  type: "race" | "measure";
-  name: string;
-  jurisdictionId: string;
-  jurisdictionName: string | null;
-  influenceScore: number; // 0-100
-  supporterShare: number | null;
-  alignmentWeight: number; // 0-1, based on viewpoint group alignment
+export interface StateDistribution {
+  state: string;
+  supporterCount: number;
+  jurisdictionCount: number;
 }
 
 export interface ViewpointGroupNetwork {
@@ -119,15 +108,15 @@ export interface ElectionDetail {
   description: string | null;
   summary: {
     supportersInScope: number;
-    supporterShareInScope: number | null;
     totalBallotItems: number;
+    racesCount: number;
+    measuresCount: number;
   };
   ballotItems: BallotItem[];
-  topRaces: BallotItem[]; // Top 3 races by influence score
+  topRaces: BallotItem[]; // Top 3 races by supporter count
   jurisdictionBreakdown: {
     jurisdictionId: string;
     jurisdictionName: string;
     supporterCount: number;
-    supporterShare: number | null;
   }[];
 }

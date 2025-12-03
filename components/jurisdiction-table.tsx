@@ -46,11 +46,47 @@ const columns: ColumnDef<JurisdictionInfluence>[] = [
     ),
   },
   {
+    accessorKey: "engagementScore",
+    header: "Engagement Score",
+    cell: ({ row }) => {
+      const score = row.getValue("engagementScore") as number;
+      return <div className="font-medium">{score.toFixed(1)}</div>;
+    },
+  },
+  {
+    accessorKey: "upcomingElectionsCount",
+    header: "Upcoming Elections",
+    cell: ({ row }) => {
+      const count = row.getValue("upcomingElectionsCount") as number;
+      const racesCount = row.original.upcomingRacesCount || 0;
+      return (
+        <div>
+          <div className="font-medium">{count}</div>
+          {racesCount > 0 && (
+            <div className="text-xs text-muted-foreground">
+              {racesCount} races
+            </div>
+          )}
+        </div>
+      );
+    },
+  },
+  {
     accessorKey: "supporterCount",
     header: "Supporters",
     cell: ({ row }) => {
       const count = row.getValue("supporterCount") as number;
-      return <div className="font-medium">{count.toLocaleString()}</div>;
+      const active90d = row.original.activeSupporterCount90d || 0;
+      return (
+        <div>
+          <div className="font-medium">{count.toLocaleString()}</div>
+          {active90d > 0 && (
+            <div className="text-xs text-muted-foreground">
+              {active90d} active (90d)
+            </div>
+          )}
+        </div>
+      );
     },
   },
   {
@@ -66,18 +102,10 @@ const columns: ColumnDef<JurisdictionInfluence>[] = [
     },
   },
   {
-    accessorKey: "activeRate",
-    header: "Active Rate",
+    accessorKey: "growth90d",
+    header: "90-Day Growth",
     cell: ({ row }) => {
-      const rate = row.getValue("activeRate") as number;
-      return <div className="font-medium">{rate.toFixed(1)}%</div>;
-    },
-  },
-  {
-    accessorKey: "growth30d",
-    header: "30-Day Growth",
-    cell: ({ row }) => {
-      const growth = row.getValue("growth30d") as number;
+      const growth = row.getValue("growth90d") as number;
       const isPositive = growth >= 0;
       return (
         <div
@@ -95,7 +123,7 @@ const columns: ColumnDef<JurisdictionInfluence>[] = [
 
 export function JurisdictionTable({ data, isLoading }: JurisdictionTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([
-    { id: "supporterShare", desc: true },
+    { id: "engagementScore", desc: true },
   ]);
 
   const table = useReactTable({
@@ -122,10 +150,11 @@ export function JurisdictionTable({ data, isLoading }: JurisdictionTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Jurisdiction</TableHead>
+              <TableHead>Engagement Score</TableHead>
+              <TableHead>Upcoming Elections</TableHead>
               <TableHead>Supporters</TableHead>
               <TableHead>Share of Turnout</TableHead>
-              <TableHead>Active Rate</TableHead>
-              <TableHead>30-Day Growth</TableHead>
+              <TableHead>90-Day Growth</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

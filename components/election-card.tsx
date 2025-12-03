@@ -3,13 +3,11 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import type { ElectionInfluence } from "@/types/dashboard";
-import { IconCalendar, IconTarget } from "@tabler/icons-react";
+import { IconCalendar } from "@tabler/icons-react";
 
 interface ElectionCardProps {
   election: ElectionInfluence;
@@ -44,47 +42,14 @@ export function ElectionCard({ election }: ElectionCardProps) {
                 {election.supportersInScope.toLocaleString()}
               </span>
             </div>
-            {election.supporterShareInScope !== null && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Supporter Share
-                </span>
-                <Badge
-                  variant={
-                    election.supporterShareInScope >= 5 ? "default" : "outline"
-                  }
-                >
-                  {election.supporterShareInScope.toFixed(1)}%
-                </Badge>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
-                <IconTarget className="h-4 w-4" />
-                Influence Targets
-              </span>
-              <span className="font-semibold">
-                {election.influenceTargetCount}
-              </span>
-            </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 Ballot Items
               </span>
-              <span className="font-semibold">
-                {election.ballotItems.length}
-              </span>
+              <span className="font-semibold">{election.ballotItemsCount}</span>
             </div>
           </div>
         </CardContent>
-        <CardFooter>
-          {election.supporterShareInScope !== null &&
-            election.supporterShareInScope >= 5 && (
-              <Badge className="w-full justify-center" variant="default">
-                High Leverage Opportunity
-              </Badge>
-            )}
-        </CardFooter>
       </Card>
     </Link>
   );
