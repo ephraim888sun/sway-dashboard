@@ -1,93 +1,204 @@
+"use client";
+
 import useSWR from "swr";
 import type {
   SummaryMetrics,
   TimeSeriesData,
   JurisdictionInfluence,
   ElectionInfluence,
+  ElectionDetail,
+  StateDistribution,
 } from "@/types/dashboard";
-
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-
-async function fetcher<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch: ${url}`);
-  }
-  return res.json();
-}
+import {
+  getTotalSupporterCountClient,
+  getJurisdictionsWithInfluenceClient,
+  getSupporterGrowthTimeSeriesClient,
+  getUpcomingElectionsClient,
+  getElectionDetailClient,
+  getStateDistributionClient,
+} from "@/lib/queries-client";
 
 export function useSummaryMetrics(viewpointGroupId?: string) {
-  const url = new URL(`${baseUrl}/api/summary`);
-  if (viewpointGroupId) {
-    url.searchParams.set("viewpointGroupId", viewpointGroupId);
-  }
   const key = `summary-${viewpointGroupId || "default"}`;
 
-  return useSWR<SummaryMetrics | null>(key, () => fetcher(url.toString()), {
-    revalidateOnFocus: false,
-    revalidateOnMount: true,
-    keepPreviousData: true,
-    fallbackData: undefined,
-  });
+  return useSWR<SummaryMetrics | null>(
+    key,
+    async () => {
+      // Get all metrics in parallel
+      const [totalSupporters, stateDistribution, upcomingElections] =
+        await Promise.all([
+          getTotalSupporterCountClient(viewpointGroupId),
+          getStateDistributionClient(viewpointGroupId),
+          getUpcomingElectionsClient(90, viewpointGroupId),
+        ]);
+
+      // Find top state
+      const topState =
+        stateDistribution && stateDistribution.length > 0
+          ? {
+              state: stateDistribution[0].state,
+              supporterCount: stateDistribution[0].supporterCount,
+            }
+          : null;
+
+      // Count elections with supporter access
+      const electionsWithAccess = upcomingElections.filter(
+        (e) => e.supportersInScope > 0
+      ).length;
+
+      // Sum total ballot items
+      const totalBallotItems = upcomingElections.reduce(
+        (sum, e) => sum + e.ballotItemsCount,
+        0
+      );
+
+      return {
+        totalSupporters,
+        topState,
+        electionsWithAccess,
+        totalBallotItems,
+      };
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: undefined,
+    }
+  );
 }
 
 export function useTimeSeriesData(
   viewpointGroupId?: string,
   period: "weekly" | "monthly" = "monthly"
 ) {
-  const url = new URL(`${baseUrl}/api/time-series`);
-  url.searchParams.set("period", period);
-  if (viewpointGroupId) {
-    url.searchParams.set("viewpointGroupId", viewpointGroupId);
-  }
   const key = `time-series-${viewpointGroupId || "default"}-${period}`;
 
-  return useSWR<TimeSeriesData | null>(key, () => fetcher(url.toString()), {
-    revalidateOnFocus: false,
-    revalidateOnMount: true,
-    keepPreviousData: true,
-    fallbackData: undefined,
-  });
+  return useSWR<TimeSeriesData | null>(
+    key,
+    async () => {
+      const data = await getSupporterGrowthTimeSeriesClient(
+        period,
+        viewpointGroupId
+      );
+      return {
+        data,
+        periodType: period,
+      };
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: undefined,
+    }
+  );
 }
 
 export function useJurisdictions(
   viewpointGroupId?: string,
-  sortBy: string = "supporterShare",
+  sortBy: string = "supporterCount",
   order: string = "desc"
 ) {
-  const url = new URL(`${baseUrl}/api/jurisdictions`);
-  url.searchParams.set("sortBy", sortBy);
-  url.searchParams.set("order", order);
-  if (viewpointGroupId) {
-    url.searchParams.set("viewpointGroupId", viewpointGroupId);
-  }
   const key = `jurisdictions-${
     viewpointGroupId || "default"
   }-${sortBy}-${order}`;
 
-  return useSWR<JurisdictionInfluence[]>(key, () => fetcher(url.toString()), {
-    revalidateOnFocus: false,
-    revalidateOnMount: true,
-    keepPreviousData: true,
-    fallbackData: undefined,
-  });
+  return useSWR<JurisdictionInfluence[]>(
+    key,
+    async () => {
+      const jurisdictions = await getJurisdictionsWithInfluenceClient(
+        viewpointGroupId
+      );
+
+      // Sort jurisdictions
+      jurisdictions.sort((a, b) => {
+        let aValue: number;
+        let bValue: number;
+
+        switch (sortBy) {
+          case "supporterCount":
+            aValue = a.supporterCount;
+            bValue = b.supporterCount;
+            break;
+          case "upcomingElectionsCount":
+            aValue = a.upcomingElectionsCount;
+            bValue = b.upcomingElectionsCount;
+            break;
+          case "upcomingBallotItemsCount":
+            aValue = a.upcomingBallotItemsCount;
+            bValue = b.upcomingBallotItemsCount;
+            break;
+          default:
+            aValue = a.supporterCount;
+            bValue = b.supporterCount;
+        }
+
+        if (order === "asc") {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      });
+
+      return jurisdictions;
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: undefined,
+    }
+  );
 }
 
 export function useElections(
   viewpointGroupId?: string,
   daysAhead: number = 90
 ) {
-  const url = new URL(`${baseUrl}/api/elections`);
-  url.searchParams.set("daysAhead", daysAhead.toString());
-  if (viewpointGroupId) {
-    url.searchParams.set("viewpointGroupId", viewpointGroupId);
-  }
   const key = `elections-${viewpointGroupId || "default"}-${daysAhead}`;
 
-  return useSWR<ElectionInfluence[]>(key, () => fetcher(url.toString()), {
-    revalidateOnFocus: false,
-    revalidateOnMount: true,
-    keepPreviousData: true,
-    fallbackData: undefined,
-  });
+  return useSWR<ElectionInfluence[]>(
+    key,
+    () => getUpcomingElectionsClient(daysAhead, viewpointGroupId),
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: undefined,
+    }
+  );
+}
+
+export function useElectionDetail(
+  electionId: string,
+  viewpointGroupId?: string
+) {
+  const key = `election-detail-${electionId}-${viewpointGroupId || "default"}`;
+
+  return useSWR<ElectionDetail | null>(
+    key,
+    () => getElectionDetailClient(electionId, viewpointGroupId),
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: undefined,
+    }
+  );
+}
+
+export function useStateDistribution(viewpointGroupId?: string) {
+  const key = `state-distribution-${viewpointGroupId || "default"}`;
+
+  return useSWR<StateDistribution[]>(
+    key,
+    () => getStateDistributionClient(viewpointGroupId),
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: undefined,
+    }
+  );
 }

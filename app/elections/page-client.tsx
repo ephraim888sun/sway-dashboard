@@ -22,14 +22,6 @@ function ElectionsContent() {
   const { selectedGroupId } = useViewpointGroup();
   const { data: elections = [], isLoading } = useElections(selectedGroupId);
 
-  const highLeverageElections = React.useMemo(
-    () =>
-      elections.filter(
-        (e) => e.supporterShareInScope !== null && e.supporterShareInScope >= 5
-      ),
-    [elections]
-  );
-
   if (isLoading) {
     return <LoadingSkeleton />;
   }
@@ -42,22 +34,6 @@ function ElectionsContent() {
           Elections in the next 90 days where your supporters can make an impact
         </p>
       </div>
-
-      {highLeverageElections.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">
-            High Leverage Opportunities
-          </h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Elections where you have ≥5% of expected turnout
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {highLeverageElections.map((election) => (
-              <ElectionCard key={election.electionId} election={election} />
-            ))}
-          </div>
-        </div>
-      )}
 
       <div>
         <h2 className="text-xl font-semibold mb-4">All Upcoming Elections</h2>
