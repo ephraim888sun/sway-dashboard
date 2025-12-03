@@ -54,7 +54,8 @@ export function SectionCards({ metrics, isLoading }: SectionCardsProps) {
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="text-muted-foreground">
-            Where your supporters can vote
+            Upcoming elections (next 90 days) where your supporters can vote on
+            ballot items
           </div>
         </CardFooter>
       </Card>
@@ -67,7 +68,8 @@ export function SectionCards({ metrics, isLoading }: SectionCardsProps) {
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="text-muted-foreground">
-            Races and measures supporters can vote on
+            Total races and measures in upcoming elections (next 90 days) where
+            supporters can vote
           </div>
         </CardFooter>
       </Card>

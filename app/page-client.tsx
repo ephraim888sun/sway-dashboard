@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import { Suspense } from "react";
 import { SectionCards } from "@/components/section-cards";
 import { TopStates } from "@/components/top-states";
